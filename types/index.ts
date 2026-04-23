@@ -42,6 +42,23 @@ export interface QuestionOption {
   text: string;
 }
 
+export type ClinicalSpecialty =
+  | "medicine"
+  | "obgyn"
+  | "peds"
+  | "pop_health"
+  | "psych"
+  | "surgery";
+
+export const CLINICAL_SPECIALTY_LABELS: Record<ClinicalSpecialty, string> = {
+  medicine: "Medicine",
+  obgyn: "Obstetrics & Gynecology",
+  peds: "Pediatrics",
+  pop_health: "Population Health",
+  psych: "Psychiatry",
+  surgery: "Surgery",
+};
+
 export interface Question {
   id: string;
   content: string;
@@ -51,12 +68,32 @@ export interface Question {
   topic_id: string | null;
   domain: McqDomain | null;
   subdomain: string | null;
+  clinical_specialty: ClinicalSpecialty | null;
   difficulty: Difficulty | null;
   canmeds_role: CanmedsRole | null;
   source_reference: string | null;
   image_urls: string[] | null;
   is_published: boolean;
   created_at: string;
+}
+
+// ── Question Bank session ────────────────────────────────────────────────────
+
+export type SessionLength = 5 | 10 | 20 | 40;
+
+export interface QBSessionFilters {
+  specialties: ClinicalSpecialty[];
+  difficulties: Difficulty[];
+  unseenOnly: boolean;
+  incorrectOnly: boolean;
+}
+
+export interface QBSession {
+  id: string;
+  questionIds: string[];
+  filters: QBSessionFilters;
+  length: SessionLength;
+  createdAt: string;
 }
 
 export interface QuestionAttempt {
