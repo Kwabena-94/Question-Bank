@@ -43,6 +43,7 @@ A unified product is needed to deliver one learning system end-to-end.
 - Implement GA4 + Microsoft Clarity tracking architecture from the start (MVP blocking requirement).
 - Enable adaptive workflows (e.g., weak topics → targeted questions/flashcards/mocks).
 - Introduce AI-powered performance analysis and readiness scoring for MCCQE-aligned preparation.
+- Enable adaptive workflows (e.g., weak topics → targeted questions/flashcards/mocks).
 - Preserve MedCognito brand and accessibility standards.
 - Migrate incrementally with low production risk.
 
@@ -88,6 +89,8 @@ A unified product is needed to deliver one learning system end-to-end.
 - Shared auth/session + profile.
 - Shared analytics/progress layer.
 - AI-generated readiness insights and personalized study actions.
+- Shared auth/session + profile.
+- Shared analytics/progress layer.
 - Design-system aligned frontend foundation.
 
 ### 6.2 Out of Scope (v1)
@@ -214,6 +217,7 @@ Navigation behavior:
   - student follow-through (cards reviewed after generation)
 
 ### 8.8 Auth, Profile, and Settings
+### 8.6 Auth, Profile, and Settings
 - Single login/session.
 - Learner profile and exam pathway preference.
 - Notification and reminder preferences.
@@ -305,6 +309,9 @@ Key identity requirement:
 - `POST /api/flashcards/generate`
 - `POST /api/recommendations/feedback`
 - `POST /api/analytics/events` (optional server-side relay for compliance/control)
+- `POST /api/question-attempts`
+- `POST /api/mock-attempts`
+- `POST /api/flashcards/generate`
 
 ### 12.2 Contracts
 - Consistent error shape across modules.
@@ -410,6 +417,9 @@ Key identity requirement:
 - **Weeks 3–5:** home dashboard + QBank integration + GA4/Clarity critical event coverage
 - **Weeks 6–8:** flashcards AI integration + readiness/recommendation v1
 - **Weeks 9–10:** mocks integration + readiness calibration + analytics polish
+- **Weeks 3–5:** home dashboard + QBank integration
+- **Weeks 6–8:** flashcards integration + recommendation v1
+- **Weeks 9–10:** mocks integration + analytics polish
 - **Weeks 11–12:** QA hardening, performance, release readiness
 
 ---
@@ -433,3 +443,4 @@ Key identity requirement:
 - `medcognito-design-system.md`
 - `medcognito-style-guide.md`
 - `home-page-lofi-designs.md`
+
