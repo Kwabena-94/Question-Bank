@@ -17,6 +17,8 @@ MedCognito currently delivers core learning experiences across three separate pr
 
 This PRD defines a unified student platform that combines these into one coherent application with shared navigation, identity, progress tracking, and adaptive recommendations. The goal is to improve learner outcomes, retention, and operational efficiency while preserving current production workflows during migration.
 
+**Top Priority Principle:** analytics must be designed in from day zero. GA4 and Microsoft Clarity instrumentation are mandatory architecture components, not post-launch add-ons.
+
 ---
 
 ## 2. Problem Statement
@@ -38,6 +40,9 @@ A unified product is needed to deliver one learning system end-to-end.
 - Unify Question Bank, Flashcards, and Mocks in one application shell.
 - Provide a single student login/session and profile context.
 - Build a shared progress model for cross-tool analytics.
+- Implement GA4 + Microsoft Clarity tracking architecture from the start (MVP blocking requirement).
+- Enable adaptive workflows (e.g., weak topics → targeted questions/flashcards/mocks).
+- Introduce AI-powered performance analysis and readiness scoring for MCCQE-aligned preparation.
 - Enable adaptive workflows (e.g., weak topics → targeted questions/flashcards/mocks).
 - Preserve MedCognito brand and accessibility standards.
 - Migrate incrementally with low production risk.
@@ -80,6 +85,10 @@ A unified product is needed to deliver one learning system end-to-end.
 - Question Bank module integration.
 - Flashcards module integration.
 - Mocks module integration.
+- GA4 and Microsoft Clarity event tracking baseline across all core student journeys.
+- Shared auth/session + profile.
+- Shared analytics/progress layer.
+- AI-generated readiness insights and personalized study actions.
 - Shared auth/session + profile.
 - Shared analytics/progress layer.
 - Design-system aligned frontend foundation.
@@ -111,6 +120,26 @@ Navigation behavior:
 ---
 
 ## 8. Functional Requirements
+
+### 8.0 Analytics-First Instrumentation (P0)
+- GA4 and Microsoft Clarity must be integrated before broad student rollout.
+- Define and implement a shared `trackEvent()` client abstraction used by all modules.
+- Ensure consistent event naming/versioning and payload schemas across QBank, Flashcards, Mocks, and Dashboard.
+- Instrument the critical journey events:
+  - app_opened
+  - module_opened
+  - question_answered
+  - mock_started / mock_submitted
+  - flashcards_generated / flashcard_flipped
+  - recommendation_viewed / recommendation_clicked / recommendation_completed
+  - readiness_viewed
+- Track attribution context on events:
+  - user_id (or pseudonymous ID where required)
+  - module
+  - topic/domain
+  - source (manual action vs recommendation)
+  - timestamp + session_id
+- Require event QA in release criteria (no “done” state without analytics verification).
 
 ### 8.1 Unified Home Dashboard
 - Show welcome hero and core CTAs:
@@ -154,6 +183,40 @@ Navigation behavior:
   - Wrong answers in QBank/Mocks → targeted flashcards/question sets.
 - Readiness score and topic mastery summary.
 
+### 8.6 AI Performance Analysis and MCCQE Readiness
+- Generate a learner-facing **MCCQE Readiness Score** (0–100) derived from:
+  - QBank accuracy (weighted by recency and difficulty)
+  - Mock performance (overall and domain-level)
+  - Consistency/streak and completion behavior
+  - Improvement trend over trailing windows (e.g., 7, 30 days)
+- Display readiness by exam blueprint domains (Medicine, Surgery, Pediatrics, Psychiatry, OB/Gyn, Preventive Medicine, Ethics/Professionalism).
+- Generate AI narrative insights:
+  - “What is improving”
+  - “What is at risk”
+  - “What to do next in 1–3 actions”
+- Provide confidence bands (e.g., low/medium/high confidence) based on data sufficiency.
+- Recompute readiness automatically after major events (mock submission, significant question volume, flashcard review completion).
+- Track recommendation acceptance and post-recommendation uplift.
+
+### 8.7 AI Flashcards API Integration Requirements
+- Flashcards remain powered by a server-side AI API integration (no API secret exposure client-side).
+- Frontend sends topic/context payload to backend proxy endpoint; backend invokes model provider.
+- Support both manual topic generation and adaptive generation from weak-topic signals.
+- Persist generation metadata:
+  - model name/version
+  - generation timestamp
+  - request mode (manual vs adaptive)
+  - referenced weak-topic tags
+- Enforce abuse controls:
+  - per-user/IP rate limits
+  - request size limits
+  - meaningful user-facing error messages and retry options
+- Maintain event instrumentation for:
+  - generation success/failure
+  - latency buckets
+  - student follow-through (cards reviewed after generation)
+
+### 8.8 Auth, Profile, and Settings
 ### 8.6 Auth, Profile, and Settings
 - Single login/session.
 - Learner profile and exam pathway preference.
@@ -170,11 +233,13 @@ Navigation behavior:
 ### 9.2 Reliability
 - Graceful module-level fallback states when APIs fail.
 - Retries and clear user-facing recovery actions.
+- AI readiness and recommendations must fail gracefully to baseline analytics UI when enrichment services are unavailable.
 
 ### 9.3 Security
 - No API keys exposed client-side.
 - Proper CORS allowlists for production domains.
 - Rate limiting for generation and high-cost endpoints.
+- Minimize sensitive data in prompt context; log redaction for AI request/response traces.
 
 ### 9.4 Accessibility
 - WCAG AA contrast.
@@ -187,6 +252,14 @@ Navigation behavior:
 - Structured logs per module.
 - Error tracking with request IDs.
 - Event telemetry for adoption and outcome metrics.
+- AI-specific telemetry:
+  - readiness recompute frequency
+  - recommendation click-through/completion
+  - flashcard generation success rate and p95 latency
+- Product analytics telemetry:
+  - GA4 event delivery health
+  - Clarity session capture coverage
+  - tracking completeness for critical funnels
 
 ---
 
@@ -229,6 +302,13 @@ Key identity requirement:
 - `GET /api/home/summary`
 - `GET /api/progress/overview`
 - `GET /api/recommendations`
+- `GET /api/readiness/score`
+- `GET /api/readiness/explain`
+- `POST /api/question-attempts`
+- `POST /api/mock-attempts`
+- `POST /api/flashcards/generate`
+- `POST /api/recommendations/feedback`
+- `POST /api/analytics/events` (optional server-side relay for compliance/control)
 - `POST /api/question-attempts`
 - `POST /api/mock-attempts`
 - `POST /api/flashcards/generate`
@@ -237,6 +317,11 @@ Key identity requirement:
 - Consistent error shape across modules.
 - User context required for all protected endpoints.
 - Pagination for activity and history endpoints.
+- Readiness endpoints return:
+  - score
+  - confidence level
+  - domain breakdown
+  - top 3 recommended actions
 
 ---
 
@@ -266,6 +351,8 @@ Key identity requirement:
 - Home dashboard shows real cross-tool stats and actionable recommendations.
 - Student can complete at least one full end-to-end study loop:
   - practice → review weakness → generate flashcards → take mock.
+- Student receives AI readiness summary with domain-level weaknesses and next-best actions after sufficient activity.
+- GA4 and Clarity capture all critical journey events in production with validated schemas.
 
 ### Quality Acceptance
 - Meets design system and style guide constraints.
@@ -283,15 +370,19 @@ Key identity requirement:
 ### Learning Outcome
 - Increase in question accuracy after recommendation completion.
 - Improvement in mock domain scores over baseline.
+- Improvement in readiness score trend after completing AI-recommended actions.
 
 ### Engagement
 - Session frequency per learner/week.
 - Average study actions per session.
+- Recommendation acceptance rate and completion rate.
 
 ### Stability
 - API success rate.
 - Frontend error rate.
 - Flashcard generation success rate.
+- Readiness pipeline successful recomputation rate.
+- Analytics pipeline reliability (GA4 + Clarity capture rate for critical events).
 
 ---
 
@@ -304,6 +395,8 @@ Key identity requirement:
 | Performance regressions | User frustration | Skeletons, lazy loading, route-level budgets |
 | CORS/auth misconfiguration | Module outages | Pre-prod environment validation and monitors |
 | Overly broad scope | Timeline risk | Strict v1 scope and milestone gates |
+| AI insight hallucination / low-trust feedback | Learner distrust | Guardrail prompts, confidence gating, transparent rationale tied to performance data |
+| Analytics blind spots from late instrumentation | Poor product decisions | Make GA4 + Clarity instrumentation a P0 release gate and QA checklist item |
 
 ---
 
@@ -314,12 +407,16 @@ Key identity requirement:
 3. Required level of historical backfill for legacy attempts?
 4. SLA expectations for AI generation latency under peak usage?
 5. Which admin workflows must be included in v1 vs deferred?
+6. What minimum activity threshold unlocks reliable readiness scoring for students?
 
 ---
 
 ## 18. Delivery Plan (12 Weeks Suggested)
 
 - **Weeks 1–2:** architecture finalization, schemas, shell scaffolding
+- **Weeks 3–5:** home dashboard + QBank integration + GA4/Clarity critical event coverage
+- **Weeks 6–8:** flashcards AI integration + readiness/recommendation v1
+- **Weeks 9–10:** mocks integration + readiness calibration + analytics polish
 - **Weeks 3–5:** home dashboard + QBank integration
 - **Weeks 6–8:** flashcards integration + recommendation v1
 - **Weeks 9–10:** mocks integration + analytics polish
@@ -332,6 +429,8 @@ Key identity requirement:
 - [ ] Core routes implemented and navigable
 - [ ] Auth/session integrated across all modules
 - [ ] Dashboard metrics validated against source data
+- [ ] GA4 + Clarity tracking plan implemented and validated for critical journeys
+- [ ] Readiness score outputs validated against expected scoring scenarios
 - [ ] Accessibility audit passed for critical user flows
 - [ ] Security review completed (secrets, CORS, rate limits)
 - [ ] Observability dashboards and alerts configured
