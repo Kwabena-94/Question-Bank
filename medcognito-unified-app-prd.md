@@ -1,7 +1,7 @@
 # MedCognito Unified Learning Platform — Product Requirements Document (PRD)
 
-**Version:** 1.0  
-**Date:** April 23, 2026  
+**Version:** 1.1  
+**Date:** April 22, 2026  
 **Status:** Draft for implementation planning  
 **Owner:** MedCognito Product + Engineering  
 **Related docs:** `medcognito-design-system.md`, `medcognito-style-guide.md`, `home-page-lofi-designs.md`
@@ -43,7 +43,6 @@ A unified product is needed to deliver one learning system end-to-end.
 - Implement GA4 + Microsoft Clarity tracking architecture from the start (MVP blocking requirement).
 - Enable adaptive workflows (e.g., weak topics → targeted questions/flashcards/mocks).
 - Introduce AI-powered performance analysis and readiness scoring for MCCQE-aligned preparation.
-- Enable adaptive workflows (e.g., weak topics → targeted questions/flashcards/mocks).
 - Preserve MedCognito brand and accessibility standards.
 - Migrate incrementally with low production risk.
 
@@ -89,8 +88,6 @@ A unified product is needed to deliver one learning system end-to-end.
 - Shared auth/session + profile.
 - Shared analytics/progress layer.
 - AI-generated readiness insights and personalized study actions.
-- Shared auth/session + profile.
-- Shared analytics/progress layer.
 - Design-system aligned frontend foundation.
 
 ### 6.2 Out of Scope (v1)
@@ -217,7 +214,6 @@ Navigation behavior:
   - student follow-through (cards reviewed after generation)
 
 ### 8.8 Auth, Profile, and Settings
-### 8.6 Auth, Profile, and Settings
 - Single login/session.
 - Learner profile and exam pathway preference.
 - Notification and reminder preferences.
@@ -309,9 +305,6 @@ Key identity requirement:
 - `POST /api/flashcards/generate`
 - `POST /api/recommendations/feedback`
 - `POST /api/analytics/events` (optional server-side relay for compliance/control)
-- `POST /api/question-attempts`
-- `POST /api/mock-attempts`
-- `POST /api/flashcards/generate`
 
 ### 12.2 Contracts
 - Consistent error shape across modules.
@@ -327,20 +320,27 @@ Key identity requirement:
 
 ## 13. Migration and Rollout Strategy
 
-### Phase 1 — Foundation
-- Launch unified shell and dashboard.
-- Keep legacy tools available behind module entry links.
+### Phase 1 — Foundation (Week 1)
+- Finalize architecture, data schemas, and BFF contract shapes.
+- Scaffold unified app shell, routing, and auth/session layer.
+- Keep all legacy tools accessible during build.
 
-### Phase 2 — Integrations
-- Integrate Question Bank and Flashcards into shared auth/progress.
-- Start recommendation engine with basic weak-topic logic.
+### Phase 2 — Core Integrations (Weeks 2–3)
+- Build home dashboard with cross-tool stats and Next Best Actions.
+- Integrate Question Bank into shared auth/progress model.
+- Implement GA4 + Clarity baseline event coverage (P0 gate).
 
-### Phase 3 — Mocks + Optimization
-- Integrate mocks results into progress/recommendations.
-- Refine readiness scoring and personalization.
+### Phase 3 — AI + Mocks (Weeks 4–6)
+- Integrate Flashcards AI with server-side proxy, adaptive generation, and abuse controls.
+- Build readiness score v1 and recommendation engine.
+- Integrate Mocks results into progress/readiness pipeline.
+- Analytics polish and readiness calibration.
 
-### Phase 4 — Consolidation
-- Decommission redundant legacy-only access patterns where parity exists.
+### Phase 4 — Hardening + Release (Weeks 7–8)
+- QA pass, accessibility audit, security review.
+- Performance tuning and load validation.
+- Decommission redundant legacy access patterns where parity exists.
+- Release readiness checklist sign-off.
 
 ---
 
@@ -411,16 +411,13 @@ Key identity requirement:
 
 ---
 
-## 18. Delivery Plan (12 Weeks Suggested)
+## 18. Delivery Plan (8 Weeks)
 
-- **Weeks 1–2:** architecture finalization, schemas, shell scaffolding
-- **Weeks 3–5:** home dashboard + QBank integration + GA4/Clarity critical event coverage
-- **Weeks 6–8:** flashcards AI integration + readiness/recommendation v1
-- **Weeks 9–10:** mocks integration + readiness calibration + analytics polish
-- **Weeks 3–5:** home dashboard + QBank integration
-- **Weeks 6–8:** flashcards integration + recommendation v1
-- **Weeks 9–10:** mocks integration + analytics polish
-- **Weeks 11–12:** QA hardening, performance, release readiness
+- **Week 1:** architecture finalization, data schemas, shell scaffolding + auth/session foundation
+- **Weeks 2–3:** home dashboard + QBank integration + GA4/Clarity critical event coverage (P0 gate)
+- **Weeks 4–5:** flashcards AI integration + readiness/recommendation v1
+- **Week 6:** mocks integration + readiness calibration + analytics polish
+- **Weeks 7–8:** QA hardening, accessibility audit, security review, performance tuning, release readiness
 
 ---
 
