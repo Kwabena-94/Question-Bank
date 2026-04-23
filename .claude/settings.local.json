@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git clone *)",
+      "Bash(cp \"/Users/kwabena/Desktop/Digital Assistant/claude-brain/medcognito-design-system.md\" \"/Users/kwabena/Desktop/Digital Assistant/Question Bank/medcognito-design-system.md\")",
+      "Bash(cp \"/Users/kwabena/Desktop/Digital Assistant/claude-brain/medcognito-brand.md\" \"/Users/kwabena/Desktop/Digital Assistant/Question Bank/medcognito-style-guide.md\")",
+      "Bash(ssh -T git@github.com)",
+      "WebFetch(domain:mcc.ca)",
+      "WebFetch(domain:mccqe1finalsoup.netlify.app)"
+    ]
+  }
+}
