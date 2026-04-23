@@ -4,7 +4,7 @@
 >
 > **Stack:** Next.js 14 · TypeScript · Tailwind CSS v3.4 · shadcn/ui (add if not present) · Lucide React · Framer Motion
 >
-> **Last updated:** March 2026
+> **Last updated:** April 2026 — warm neutral palette introduced; mc-nursing/mc-pharmacy removed as UI tokens; card system unified (neutral-first); track-specific shadows removed; component library expanded. See `../medcognito-design-skills/README.md` for full changelog and Cowork skill files.
 
 ---
 
@@ -103,20 +103,21 @@ const config: Config = {
           light:   "#FFF4EB",
           dark:    "#CC5C00",
         },
-        // --- Sub-brand palette ---
-        "mc-nursing": {
-          DEFAULT: "#2E7D32",
-          hover:   "#1B5E20",
-          light:   "rgba(46, 125, 50, 0.10)",
-        },
-        "mc-pharmacy": {
-          DEFAULT: "#145A79",
-          hover:   "#0E3F55",
-          light:   "#EBF4F8",
-        },
-        "mc-pink": {
-          DEFAULT: "#F9B4C7",
-          light:   "#FEF0F4",
+        // --- Warm stone neutral scale (replaces cool gray + track sub-brands) ---
+        // Slight warm undertone (hue ~30°, sat 5-7%) — harmonises with ruby + orange.
+        // NOTE: mc-neutral-500 (#87817A) = 3.83:1 on white — NOT safe for normal text.
+        // Minimum for body/caption text: mc-neutral-600 (#625C56) = 6.58:1 ✓
+        "mc-neutral": {
+          50:  "#FAFAF9",   // near-white, hover tints
+          100: "#F5F3F0",   // page background (replaces #F2F3F6)
+          200: "#EAE7E2",   // borders, dividers, input outlines
+          300: "#D5D0C9",   // subtle borders, disabled outlines
+          400: "#ADA79F",   // placeholder icons, decorative only
+          500: "#87817A",   // large text / icons only (3.83:1 — fails AA for normal text)
+          600: "#625C56",   // muted-foreground, captions (6.58:1 ✓ AA)
+          700: "#47423C",   // strong secondary text (10.4:1 ✓ AAA)
+          800: "#2C2823",   // very dark, near-black surfaces
+          900: "#1C1814",   // foreground / primary text (17.3:1 ✓ AAA)
         },
         // --- Semantic surface tokens (CSS var driven) ---
         background:  "hsl(var(--background))",
@@ -205,15 +206,9 @@ const config: Config = {
         "card-raised":    "0 4px 12px rgba(0,0,0,0.07), 0 20px 48px rgba(0,0,0,0.09)",
         "card-raised-hover":"0 8px 24px rgba(0,0,0,0.10), 0 28px 56px rgba(0,0,0,0.11)",
 
-        // Track-aware ambient shadows — tight + atmospheric, color-matched
-        "card-ruby":         "0 2px 8px rgba(158,14,39,0.07), 0 12px 32px rgba(158,14,39,0.09)",
-        "card-ruby-hover":   "0 4px 16px rgba(158,14,39,0.11), 0 20px 48px rgba(158,14,39,0.12)",
-        "card-nursing":      "0 2px 8px rgba(46,125,50,0.07), 0 12px 32px rgba(46,125,50,0.09)",
-        "card-nursing-hover":"0 4px 16px rgba(46,125,50,0.11), 0 20px 48px rgba(46,125,50,0.12)",
-        "card-pharmacy":     "0 2px 8px rgba(20,90,121,0.07), 0 12px 32px rgba(20,90,121,0.09)",
-        "card-pharmacy-hover":"0 4px 16px rgba(20,90,121,0.11), 0 20px 48px rgba(20,90,121,0.12)",
-        "card-orange":       "0 2px 8px rgba(0,0,0,0.05), 0 12px 32px rgba(0,0,0,0.07)",
-        "card-orange-hover": "0 4px 16px rgba(0,0,0,0.08), 0 20px 48px rgba(0,0,0,0.09)",
+        // REMOVED: track-specific colored shadows (card-ruby, card-nursing, card-pharmacy, card-orange)
+        // All card surfaces now use the neutral shadow system above.
+        // Track identity is expressed through label text (MCCQE1, NCLEX-RN, PEBC), not shadow color.
 
         // Overlay / floating elements
         "dropdown": "0 8px 24px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06)",
@@ -308,9 +303,9 @@ export default config;
 /* ─── MedCognito Design Tokens ───────────────────────────────────────── */
 @layer base {
   :root {
-    /* Surfaces — page is off-white so white cards pop via shadow alone (no border needed) */
-    --background:          220 16% 96%;          /* #F2F3F6 — off-white page bg; cards (pure white) lift via shadow */
-    --foreground:          220 13% 13%;          /* #1C1F26 — primary text */
+    /* Surfaces — barely warm off-white page bg; pure white cards lift via shadow (no border needed) */
+    --background:          36 11% 95%;           /* #F4F2EF — barely warm, whisper of warmth */
+    --foreground:          25 12% 10%;           /* #1C1814 — warm near-black primary text */
     --card:                0 0% 100%;            /* #FFFFFF — cards sit above page bg */
     --card-foreground:     220 13% 13%;
     --popover:             0 0% 100%;
@@ -320,13 +315,13 @@ export default config;
     --primary:             349 84% 33%;          /* #9E0E27 */
     --primary-foreground:  0 0% 100%;
 
-    /* Secondary — neutral warm grey */
-    --secondary:           220 14% 96%;          /* #F3F4F8 */
-    --secondary-foreground:220 13% 30%;
+    /* Secondary — barely warm neutral */
+    --secondary:           36 11% 95%;           /* #F4F2EF — matches page bg */
+    --secondary-foreground:25 9% 26%;            /* #47423C — mc-neutral-700 */
 
     /* Muted */
-    --muted:               220 14% 96%;
-    --muted-foreground:    220 9% 46%;           /* #6B7280 */
+    --muted:               36 11% 95%;           /* #F4F2EF */
+    --muted-foreground:    25 6% 36%;            /* #625C56 — mc-neutral-600 (6.58:1 ✓ AA) */
 
     /* Accent — Philippine Orange */
     --accent:              27 99% 51%;           /* #FE7406 */
@@ -341,9 +336,9 @@ export default config;
     --warning-foreground:  0 0% 100%;
 
     /* Structure */
-    --border:              220 13% 91%;          /* #E4E6EB */
-    --input:               220 13% 91%;
-    --ring:                349 84% 33%;          /* focus ring = ruby */
+    --border:              30 8% 90%;            /* #EAE7E2 — warm neutral-200 */
+    --input:               30 8% 90%;
+    --ring:                349 84% 33%;          /* focus ring = ruby always */
 
     /* Layout */
     --radius:              10px;
@@ -555,16 +550,17 @@ Button.displayName = "Button";
 
 ### Card
 
-**Version 2 — March 2026**
+**Version 3 — April 2026**
 
-Cards use shadow-only elevation. No border on any card surface — separation comes from the two-layer ambient shadow against the off-white page background (`#F2F3F6`). Color is restrained to three places only: the 2px top accent stripe, progress bars, and CTA buttons. Everything else (icon wells, badge backgrounds, body text) stays neutral.
+Cards use shadow-only elevation. No border on any card surface — separation comes from the two-layer ambient shadow against the warm page background (`#F5F3F0`). All card surfaces are white (`bg-card`). Color appears in exactly three places: the 2px top accent stripe, progress bars, and CTA buttons. Everything else uses neutral tokens.
 
 **Design rules (mandatory):**
 - Never add a border to a card surface — use `outlined` variant only when a boundary is semantically required
-- Never use track color on icon wells, card backgrounds, or metadata text
-- Icon wells are always neutral (`bg-secondary/50`) — no colored icon backgrounds
-- Card title always uses `text-foreground` — never a track color
-- Track labels (badges) are small (10px uppercase), top-right — present for identity, not competing with the title
+- No tinted card backgrounds — all cards are white regardless of track content
+- Icon wells are always neutral (`bg-secondary/70`) — no colored icon backgrounds
+- Card title always uses `text-foreground` — never a brand color
+- Track identity expressed through label text only (MCCQE1, NCLEX-RN, PEBC) — not color
+- All cards use neutral shadows (`shadow-card` / `shadow-card-hover`) — no track-specific colored shadows
 - Hover lift is `translateY(-2px)` + shadow intensification — never color change
 - Card radius is `rounded-md` (8px) — inner elements use `rounded-DEFAULT` (6px)
 
@@ -578,24 +574,25 @@ Cards use shadow-only elevation. No border on any card surface — separation co
 | `outlined` | Hard boundary needed (tables, code, forms) | No shadow, border |
 | `ghost` | Transparent grouping, zero visual weight | None |
 
-**Accent shadows (track cards only):**
+**Accent stripes (the only color on a card surface):**
 
-| Accent | Default shadow | Hover shadow |
+| Accent | Stripe token | Use |
 |---|---|---|
-| `ruby` | `shadow-card-ruby` | `shadow-card-ruby-hover` |
-| `nursing` | `shadow-card-nursing` | `shadow-card-nursing-hover` |
-| `pharmacy` | `shadow-card-pharmacy` | `shadow-card-pharmacy-hover` |
-| `orange` | `shadow-card` (neutral) | `shadow-card-hover` |
+| `ruby` | `before:bg-primary` → `#9E0E27` | Primary content, all track modules |
+| `orange` | `before:bg-accent` → `#FE7406` | Featured content, daily challenge |
+| none | (no stripe) | Neutral/utility panels |
 
-**Contrast-safe text on track cards (fixed hex, not opacity-based):**
+All cards use `shadow-card` / `shadow-card-hover` regardless of accent. Track-specific colored shadows are removed.
 
-| Context | Color | Ratio |
-|---|---|---|
-| Title (any card) | `#1C1F26` (foreground) | 14–16:1 |
-| Ruby metadata/sub-text | `#9E0E27` | 4.9:1 on white |
-| Nursing badge/metadata | `#14491A` | 5.0:1 |
-| Pharmacy badge/metadata | `#0E3F55` | 5.2:1 |
-| Orange text | `#A34A00` | 5.4:1 |
+**Contrast-safe text on all card surfaces (white bg):**
+
+| Context | Token | Hex | Ratio |
+|---|---|---|---|
+| Card title | `text-foreground` | `#1C1814` | 18.2:1 ✓ AAA |
+| Progress % | `text-primary` | `#9E0E27` | 8.3:1 ✓ AAA |
+| Metadata / captions | `text-muted-foreground` | `#625C56` | 6.58:1 ✓ AA |
+| Track label pill | `text-muted-foreground` | `#625C56` | 6.58:1 ✓ AA |
+| CTA button label | `text-primary-foreground` | `#FFFFFF` on `#9E0E27` | 8.3:1 ✓ AAA |
 
 ```tsx
 // components/ui/med-card.tsx
@@ -708,16 +705,20 @@ export function CardFooter({ children, className }: { children: React.ReactNode;
 // Slot 4: Detail    — metadata (contrast-safe fixed hex, below progress)
 // Slot 5: Action    — CTA button (anchors base, full width)
 
+// All tracks now use unified neutral tokens — identity via label text, not color.
+// accentColor: ruby primary for all tracks; orange for daily/featured only.
+// metaColor: muted-foreground (#625C56) for all tracks — 6.58:1 ✓ AA on white.
 const trackConfig: Record<CardAccent, {
   label: string;
   accentColor: string;
-  metaColor: string;    // contrast-safe fixed hex for metadata text
+  metaColor: string;
   ctaBg: string;
 }> = {
-  ruby:     { label: "MCCQE1",  accentColor: "#9E0E27", metaColor: "#9E0E27", ctaBg: "#9E0E27" },
-  nursing:  { label: "NCLEX-RN",accentColor: "#2E7D32", metaColor: "#14491A", ctaBg: "#2E7D32" },
-  pharmacy: { label: "PEBC",    accentColor: "#145A79", metaColor: "#0E3F55", ctaBg: "#145A79" },
-  orange:   { label: "Daily",   accentColor: "#FE7406", metaColor: "#A34A00", ctaBg: "#9E0E27" },
+  ruby:     { label: "MCCQE1",  accentColor: "#9E0E27", metaColor: "#625C56", ctaBg: "#9E0E27" },
+  nursing:  { label: "NCLEX-RN",accentColor: "#9E0E27", metaColor: "#625C56", ctaBg: "#9E0E27" },
+  pharmacy: { label: "PEBC",    accentColor: "#9E0E27", metaColor: "#625C56", ctaBg: "#9E0E27" },
+  orange:   { label: "Daily",   accentColor: "#FE7406", metaColor: "#625C56", ctaBg: "#CC5C00" },
+  // Note: orange ctaBg uses mc-orange-dark (#CC5C00) for WCAG AA compliance at 13px label size
 };
 
 interface TrackCardProps {
@@ -937,14 +938,14 @@ export function Textarea({ error, className, ...props }: React.TextareaHTMLAttri
 // components/ui/badge.tsx
 import { cn } from "@/lib/utils";
 
-type BadgeVariant = "default" | "ruby" | "orange" | "nursing" | "pharmacy" | "success" | "warning" | "destructive" | "outline";
+// mc-nursing and mc-pharmacy badge variants removed — track identity is now text-label only.
+// Use "primary" for all brand/track badges; "accent" for featured/daily content.
+type BadgeVariant = "default" | "primary" | "accent" | "success" | "warning" | "destructive" | "outline";
 
 const badgeVariants: Record<BadgeVariant, string> = {
   default:      "bg-secondary text-secondary-foreground",
-  ruby:         "bg-mc-ruby-light text-mc-ruby",
-  orange:       "bg-mc-orange-light text-mc-orange-dark",
-  nursing:      "bg-mc-nursing-light text-mc-nursing-hover",
-  pharmacy:     "bg-mc-pharmacy-light text-mc-pharmacy-hover",
+  primary:      "bg-mc-ruby-light text-mc-ruby",          // ruby — all track labels
+  accent:       "bg-mc-orange-light text-mc-orange-dark", // orange — featured/daily
   success:      "bg-success/10 text-success",
   warning:      "bg-warning/10 text-warning",
   destructive:  "bg-destructive/10 text-destructive",
@@ -983,9 +984,11 @@ export function Badge({ variant = "default", children, className }: BadgeProps) 
 // components/ui/progress-bar.tsx
 import { cn } from "@/lib/utils";
 
+// mc-nursing and mc-pharmacy fill variants removed.
+// All track progress bars use "primary" (ruby). Use "accent" for orange/featured contexts.
 interface ProgressBarProps {
   value: number;              // 0-100
-  variant?: "ruby" | "orange" | "nursing" | "pharmacy" | "success";
+  variant?: "primary" | "accent" | "success";
   size?: "sm" | "md" | "lg";
   showLabel?: boolean;
   label?: string;
@@ -994,11 +997,9 @@ interface ProgressBarProps {
 
 const trackHeight = { sm: "h-1.5", md: "h-2.5", lg: "h-4" };
 const fillColor = {
-  ruby:     "bg-mc-ruby",
-  orange:   "bg-mc-orange",
-  nursing:  "bg-mc-nursing",
-  pharmacy: "bg-mc-pharmacy",
-  success:  "bg-success",
+  primary: "bg-primary",   // ruby — all track modules
+  accent:  "bg-accent",    // orange — daily/featured
+  success: "bg-success",
 };
 
 export function ProgressBar({ value, variant = "ruby", size = "md", showLabel, label, className }: ProgressBarProps) {
