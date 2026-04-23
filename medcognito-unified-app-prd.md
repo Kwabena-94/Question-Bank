@@ -214,9 +214,29 @@ Navigation behavior:
   - student follow-through (cards reviewed after generation)
 
 ### 8.8 Auth, Profile, and Settings
-- Single login/session.
+- Single login/session with dual-mode auth (Teachable-linked SSO and standalone).
 - Learner profile and exam pathway preference.
 - Notification and reminder preferences.
+
+### 8.9 AI Question Ingestion Pipeline (Admin)
+The primary question-loading workflow is AI-assisted, not spreadsheet-based. Goal: an admin uploads source material and the system produces publication-ready questions with minimal manual effort.
+
+**Ingestion flow:**
+1. Admin uploads source material (PDF textbooks, clinical guidelines, MCC objectives documents, reference notes).
+2. AI extracts relevant clinical content and generates 5-option MCQs aligned to the MCCQE1 blueprint (CanMEDS roles, 8 domains across Dimensions of Care and Physician Activities).
+3. AI auto-tags each question: domain, sub-topic, difficulty estimate, CanMEDS role, source reference.
+4. Questions enter a **Review Queue** — admin reviews, edits, approves, or rejects each question before it goes live.
+5. Approved questions publish to the Question Bank with full metadata.
+
+**Requirements:**
+- Support bulk upload (multiple PDFs in one session).
+- Generation prompt must enforce MCC question format: clinical vignette stem, 5 options, single best answer, detailed explanation citing the reasoning and distractor logic.
+- Enforce domain coverage — flag if a batch skews too heavily toward one domain.
+- Persist generation metadata: source file, model version, generation timestamp, admin who approved.
+- Admin can edit any field (stem, options, answer, explanation, tags) before approval.
+- Reject action sends question to archive (not deleted) with reject reason for audit trail.
+- Rate-limit ingestion jobs to prevent runaway API costs (max concurrent jobs configurable).
+- Track ingestion pipeline metrics: questions generated, approved rate, rejection rate, avg review time.
 
 ---
 
@@ -225,6 +245,11 @@ Navigation behavior:
 ### 9.1 Performance
 - Home page interactive load target: <2.5s on standard broadband.
 - Module navigation should feel near-instant with loading skeletons.
+- AI generation latency targets: p95 < 6s raw; < 500ms on cache hit.
+- Caching architecture (three layers):
+  1. **Semantic cache (Redis):** Cache AI responses keyed by normalised topic hash. Near-identical topic requests return cached output without a model call.
+  2. **Token streaming:** Stream generation responses token-by-token so students see content appearing immediately — perceived latency is effectively zero.
+  3. **Pre-generation:** Background job pre-generates flashcard sets for the top-frequency MCCQE1 blueprint topics (Cardiology, Respirology, GI, Neurology, etc.) on a nightly schedule. Cache is warmed before students request them.
 
 ### 9.2 Reliability
 - Graceful module-level fallback states when APIs fail.
@@ -400,23 +425,31 @@ Key identity requirement:
 
 ---
 
-## 17. Open Questions
+## 17. Resolved Architecture Decisions
 
-1. Preferred auth source of truth (Teachable-linked vs standalone identity)?
-2. Final readiness score formula ownership (Product vs Academic team)?
-3. Required level of historical backfill for legacy attempts?
-4. SLA expectations for AI generation latency under peak usage?
-5. Which admin workflows must be included in v1 vs deferred?
-6. What minimum activity threshold unlocks reliable readiness scoring for students?
+1. **Auth source of truth:** Dual-mode — Teachable-linked SSO and standalone identity both supported. Auth layer must abstract the provider so either path works without platform coupling.
+2. **Readiness score formula ownership:** Academic team owns the formula. Engineering implements and exposes the scoring pipeline; Academic team defines weights and domain thresholds.
+3. **Historical backfill:** None required. This is a new system — all students start from zero. No legacy data migration.
+4. **AI generation latency:** Optimise for minimum perceived latency via: (a) semantic response cache (Redis) for repeated or similar topic requests; (b) token streaming so students see content appearing immediately; (c) pre-generation of flashcard sets for the highest-frequency MCC blueprint topics on a background schedule. Raw generation SLA target: p95 < 6s; with cache hit the target is < 500ms.
+5. **Admin workflows v1:** AI-powered question ingestion (see §8.9), edit/remove questions, view basic student progress. Mock template management and enrollment admin deferred to v2.
+6. **Readiness score unlock threshold:** Weighted 3-tier confidence model informed by the MCCQE1 structure (230 MCQs across 8 domains — 4 Dimensions of Care + 4 Physician Activities; pass mark 439/600):
+
+| Tier | Questions Answered | Domains Covered | Mock Completed | Confidence Band Shown |
+|---|---|---|---|---|
+| Early signal | ≥ 50 | ≥ 2 of 8 | No | Low — "Preliminary estimate" |
+| Developing | ≥ 100 | ≥ 5 of 8 | No | Medium |
+| Reliable | ≥ 150 | All 8 | ≥ 1 | High |
+
+Below the Early Signal threshold, show a progress-to-unlock indicator ("Answer 50 questions across 2+ domains to see your readiness score") rather than a score.
 
 ---
 
 ## 18. Delivery Plan (8 Weeks)
 
-- **Week 1:** architecture finalization, data schemas, shell scaffolding + auth/session foundation
+- **Week 1:** architecture finalization, data schemas, dual-mode auth/session, shell scaffolding, Redis caching layer setup
 - **Weeks 2–3:** home dashboard + QBank integration + GA4/Clarity critical event coverage (P0 gate)
-- **Weeks 4–5:** flashcards AI integration + readiness/recommendation v1
-- **Week 6:** mocks integration + readiness calibration + analytics polish
+- **Weeks 4–5:** flashcards AI integration (streaming + semantic cache + pre-generation) + readiness/recommendation v1 (MCC-informed 3-tier confidence model)
+- **Week 6:** mocks integration + readiness calibration + AI question ingestion pipeline (admin) + analytics polish
 - **Weeks 7–8:** QA hardening, accessibility audit, security review, performance tuning, release readiness
 
 ---
