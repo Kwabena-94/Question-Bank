@@ -75,3 +75,18 @@
     border-radius: 4px;
   }
 }
+
+/* Enforce a 16px minimum font size on desktop so in-app copy is never
+   smaller than body text. Tailwind's text-xs (12), text-sm (14), and
+   text-[13px]/[15px] utilities all floor to 16px at ≥1024px. */
+@media (min-width: 1024px) {
+  html { font-size: 16px; }
+  body { font-size: 16px; line-height: 1.55; }
+  .text-xs { font-size: 16px !important; line-height: 1.45 !important; }
+  .text-sm { font-size: 16px !important; line-height: 1.55 !important; }
+  .text-\[11px\],
+  .text-\[12px\],
+  .text-\[13px\],
+  .text-\[14px\],
+  .text-\[15px\] { font-size: 16px !important; line-height: 1.55 !important; }
+}

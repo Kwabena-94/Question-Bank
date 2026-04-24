@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import SessionRunner from "@/components/question-bank/SessionRunner";
 import type { Question } from "@/types";
 
-export const metadata: Metadata = { title: "Practice — MedCognito" };
+export const metadata: Metadata = { title: "Practice — MedBuddy" };
 
 interface PageProps {
   params: { id: string };

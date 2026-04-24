@@ -4,7 +4,7 @@ import { Toaster } from "sonner";
 import Script from "next/script";
 
 export const metadata: Metadata = {
-  title: "MedCognito — Your Study Platform",
+  title: "MedBuddy — Your Study Platform",
   description:
     "The unified learning platform for Canadian medical licensure exam preparation. Question Bank, Flashcards, and Mock Exams in one place.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),

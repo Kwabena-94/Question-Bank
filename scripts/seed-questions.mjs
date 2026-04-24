@@ -82,6 +82,8 @@ async function main() {
 
   const data = parseSource();
   const rows = [];
+  const seenRefs = new Set();
+  let dupeCount = 0;
   for (const [specialty, items] of Object.entries(data)) {
     if (!SPECIALTY_MAP[specialty]) {
       console.warn(`Skipping unknown specialty: ${specialty}`);
@@ -96,11 +98,16 @@ async function main() {
       if (!row.options.length || row.options.some((o) => !o.key)) continue;
       // Correct answer must reference an existing option key
       if (!row.options.some((o) => o.key === row.correct_option)) continue;
+      if (seenRefs.has(row.source_reference)) {
+        dupeCount += 1;
+        continue;
+      }
+      seenRefs.add(row.source_reference);
       rows.push(row);
     }
   }
 
-  console.log(`Prepared ${rows.length} rows. Upserting in batches…`);
+  console.log(`Prepared ${rows.length} rows (deduped ${dupeCount}). Upserting in batches…`);
 
   const BATCH = 500;
   let inserted = 0;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Sidebar from "./Sidebar";
 
 interface AppShellProps {
@@ -8,8 +8,26 @@ interface AppShellProps {
   children: React.ReactNode;
 }
 
+const COLLAPSE_KEY = "mc:sidebar-collapsed";
+
 export default function AppShell({ userId, children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(COLLAPSE_KEY);
+    if (stored === "1") setCollapsed(true);
+    setHydrated(true);
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      const next = !v;
+      localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+      return next;
+    });
+  }
 
   return (
     <div className="min-h-screen bg-neutral-100 flex">
@@ -17,9 +35,10 @@ export default function AppShell({ userId, children }: AppShellProps) {
         userId={userId}
         mobileOpen={sidebarOpen}
         onMobileClose={() => setSidebarOpen(false)}
+        collapsed={hydrated && collapsed}
+        onToggleCollapsed={toggleCollapsed}
       />
 
-      {/* Mobile overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-20 bg-black/40 lg:hidden"
@@ -27,9 +46,12 @@ export default function AppShell({ userId, children }: AppShellProps) {
         />
       )}
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
-        {/* Top bar (mobile) */}
+      <div
+        className={
+          "flex-1 flex flex-col min-w-0 transition-[margin] duration-200 " +
+          (hydrated && collapsed ? "lg:ml-16" : "lg:ml-64")
+        }
+      >
         <header className="lg:hidden sticky top-0 z-10 h-14 bg-white border-b border-neutral-200 flex items-center px-4 gap-3">
           <button
             onClick={() => setSidebarOpen(true)}
@@ -43,16 +65,18 @@ export default function AppShell({ userId, children }: AppShellProps) {
             </svg>
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-white font-poppins font-bold text-sm">M</span>
-            </div>
+            <img
+              src="/logos/favicon.png"
+              alt="MedBuddy"
+              className="w-7 h-7 rounded-lg"
+            />
             <span className="font-poppins font-bold text-sm text-neutral-900">
-              Med<span className="text-primary">Cognito</span>
+              Med<span className="text-primary">Buddy</span>
             </span>
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-8">
+        <main className="flex-1 px-4 py-5 lg:px-6 lg:py-6">
           {children}
         </main>
       </div>
