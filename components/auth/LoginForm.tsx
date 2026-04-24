@@ -2,29 +2,63 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 
 export default function LoginForm() {
-  const router = useRouter();
   const supabase = createClient();
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const origin =
+      typeof window !== "undefined"
+        ? window.location.origin
+        : process.env.NEXT_PUBLIC_APP_URL;
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${origin}/auth/callback`,
+      },
+    });
+
     if (error) {
       setError(error.message);
       setLoading(false);
       return;
     }
-    router.push("/home");
-    router.refresh();
+
+    setSent(true);
+    setLoading(false);
+  }
+
+  if (sent) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-green-50 border border-green-200 text-green-800 text-sm rounded-md px-4 py-3">
+          <p className="font-medium mb-1">Check your email</p>
+          <p>
+            We sent a magic link to <span className="font-medium">{email}</span>.
+            Click it to sign in.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setSent(false);
+            setEmail("");
+          }}
+          className="text-sm text-primary hover:underline"
+        >
+          Use a different email
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -36,7 +70,10 @@ export default function LoginForm() {
       )}
 
       <div>
-        <label className="block text-sm font-medium text-neutral-700 mb-1.5" htmlFor="email">
+        <label
+          className="block text-sm font-medium text-neutral-700 mb-1.5"
+          htmlFor="email"
+        >
           Email
         </label>
         <input
@@ -51,35 +88,25 @@ export default function LoginForm() {
         />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-neutral-700 mb-1.5" htmlFor="password">
-          Password
-        </label>
-        <input
-          id="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-4 py-3 border border-neutral-300 rounded-md text-base text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-          placeholder="••••••••"
-        />
-      </div>
-
       <button
         type="submit"
         disabled={loading}
         className="w-full py-3 bg-primary text-white font-poppins font-medium text-sm rounded-md hover:bg-primary-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
       >
-        {loading ? "Signing in…" : "Sign In"}
+        {loading ? "Sending link…" : "Send magic link"}
       </button>
+
+      <p className="text-xs text-neutral-500 text-center">
+        No password needed. We&apos;ll email you a secure sign-in link.
+      </p>
 
       <div className="relative my-2">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-neutral-200" />
         </div>
-        <div className="relative flex justify-center text-xs text-neutral-400 bg-white px-2">or</div>
+        <div className="relative flex justify-center text-xs text-neutral-400 bg-white px-2">
+          or
+        </div>
       </div>
 
       <a

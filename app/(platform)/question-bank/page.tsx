@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import StartSessionForm from "@/components/question-bank/StartSessionForm";
 import type { ClinicalSpecialty } from "@/types";
 
-export const metadata: Metadata = { title: "Question Bank — MedCognito" };
+export const metadata: Metadata = { title: "Question Bank — MedBuddy" };
 
 export default async function QuestionBankPage() {
   const user = await requireAuth();
@@ -30,7 +30,7 @@ export default async function QuestionBankPage() {
     .eq("source", "question_bank");
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       <div>
         <h1 className="font-poppins text-2xl font-semibold text-neutral-900">
           Question Bank

@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 import { requireAuth } from "@/lib/auth";
 
-export const metadata: Metadata = { title: "Home — MedCognito" };
+export const metadata: Metadata = { title: "Home — MedBuddy" };
 
 export default async function HomePage() {
   const user = await requireAuth();

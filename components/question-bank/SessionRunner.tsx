@@ -11,6 +11,7 @@ import {
   CLINICAL_SPECIALTY_LABELS,
   type Question,
 } from "@/types";
+import { track } from "@/lib/analytics/track";
 
 type OptionKey = "a" | "b" | "c" | "d" | "e";
 
@@ -53,7 +54,7 @@ export default function SessionRunner({ sessionId, questions }: Props) {
 
   if (!question) {
     return (
-      <div className="max-w-3xl mx-auto card-surface p-6">
+      <div className="max-w-5xl mx-auto card-surface p-6">
         <p className="text-neutral-500 text-sm">No questions in this session.</p>
       </div>
     );
@@ -78,6 +79,13 @@ export default function SessionRunner({ sessionId, questions }: Props) {
         };
         setResult(next);
         setResults((prev) => ({ ...prev, [question.id]: next }));
+        track.questionAnswered({
+          question_id: question.id,
+          is_correct: r.isCorrect,
+          domain: question.domain ?? undefined,
+          session_id: sessionId,
+          source: "manual",
+        });
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Failed to record answer.");
       }
@@ -97,7 +105,7 @@ export default function SessionRunner({ sessionId, questions }: Props) {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4">
+    <div className="max-w-5xl mx-auto space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -130,7 +138,7 @@ export default function SessionRunner({ sessionId, questions }: Props) {
 
       {/* Stem */}
       <div className="card-surface p-6">
-        <p className="text-[15px] leading-relaxed text-neutral-800 whitespace-pre-wrap">
+        <p className="text-sm leading-relaxed text-neutral-800 whitespace-pre-wrap">
           {question.content}
         </p>
 

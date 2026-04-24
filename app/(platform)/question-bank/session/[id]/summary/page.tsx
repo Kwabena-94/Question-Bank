@@ -5,7 +5,7 @@ import { requireAuth } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { CLINICAL_SPECIALTY_LABELS, type ClinicalSpecialty } from "@/types";
 
-export const metadata: Metadata = { title: "Session summary — MedCognito" };
+export const metadata: Metadata = { title: "Session summary — MedBuddy" };
 
 interface PageProps {
   params: { id: string };
@@ -53,7 +53,7 @@ export default async function QBSessionSummaryPage({ params }: PageProps) {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="font-poppins text-2xl font-semibold text-neutral-900">
           Session complete
