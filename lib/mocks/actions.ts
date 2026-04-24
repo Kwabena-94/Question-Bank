@@ -62,6 +62,7 @@ const customSchema = z.object({
   specialties: z
     .array(z.enum(["medicine", "obgyn", "peds", "pop_health", "psych", "surgery"]))
     .default([]),
+  difficulty: z.enum(["easy", "medium", "hard", "mixed"]).default("mixed"),
 });
 
 /**
@@ -89,6 +90,9 @@ export async function startCustomMock(input: z.input<typeof customSchema>) {
     .eq("is_published", true);
   if (parsed.specialties.length) {
     q = q.in("clinical_specialty", parsed.specialties);
+  }
+  if (parsed.difficulty !== "mixed") {
+    q = q.eq("difficulty", parsed.difficulty);
   }
   // Pull a generous candidate pool, then random-sample client-side.
   const { data: pool, error: pErr } = await q.limit(2000);
@@ -122,6 +126,7 @@ export async function startCustomMock(input: z.input<typeof customSchema>) {
       custom_config: {
         count: parsed.count,
         specialties: parsed.specialties,
+        difficulty: parsed.difficulty,
         duration_minutes: durationMinutes,
       },
     })

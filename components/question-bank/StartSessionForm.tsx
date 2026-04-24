@@ -48,7 +48,6 @@ export default function StartSessionForm({
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "Something went wrong.";
-        // Next.js redirect throws — don't surface that
         if (msg.includes("NEXT_REDIRECT")) return;
         setError(msg);
       }
@@ -58,23 +57,23 @@ export default function StartSessionForm({
   const hasAttempts = attemptCount > 0;
 
   return (
-    <div className="card-surface p-6 space-y-6">
+    <div className="rounded-xl bg-white border border-neutral-200/70 shadow-card hover:shadow-card-hover transition-shadow duration-200 divide-y divide-neutral-100">
       {/* Session length */}
-      <section>
-        <h2 className="font-poppins font-semibold text-sm text-neutral-900 mb-3">
+      <section className="p-6">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
           Session length
-        </h2>
-        <div className="grid grid-cols-4 gap-2">
+        </p>
+        <div className="grid grid-cols-4 gap-2 mt-3">
           {LENGTHS.map((n) => (
             <button
               key={n}
               type="button"
               onClick={() => setLength(n)}
               className={cn(
-                "py-3 rounded-md border text-sm font-medium transition-colors",
+                "py-3 rounded-md border text-sm font-medium transition-all duration-200 active:scale-[0.98]",
                 length === n
-                  ? "border-primary bg-primary/8 text-primary"
-                  : "border-neutral-200 text-neutral-600 hover:border-neutral-300"
+                  ? "border-primary bg-primary/[0.08] text-primary shadow-sm"
+                  : "border-neutral-200 text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50"
               )}
             >
               {n} Qs
@@ -84,14 +83,16 @@ export default function StartSessionForm({
       </section>
 
       {/* Specialty */}
-      <section>
-        <h2 className="font-poppins font-semibold text-sm text-neutral-900 mb-1">
-          Specialty
-        </h2>
-        <p className="text-xs text-neutral-500 mb-3">
-          Leave empty to include all.
-        </p>
-        <div className="flex flex-wrap gap-2">
+      <section className="p-6">
+        <div className="flex items-baseline justify-between gap-2 flex-wrap">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+            Specialty
+          </p>
+          <p className="text-xs text-neutral-400">
+            Leave empty to include all.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 mt-3">
           {SPECIALTIES.map((s) => {
             const active = specialties.includes(s);
             const count = specialtyCounts[s] ?? 0;
@@ -101,14 +102,16 @@ export default function StartSessionForm({
                 type="button"
                 onClick={() => setSpecialties(toggle(specialties, s))}
                 className={cn(
-                  "px-3 py-1.5 rounded-full border text-xs font-medium transition-colors",
+                  "px-3 py-1.5 rounded-full border text-xs font-medium transition-all duration-200 active:scale-[0.98]",
                   active
-                    ? "border-primary bg-primary/8 text-primary"
-                    : "border-neutral-200 text-neutral-600 hover:border-neutral-300"
+                    ? "border-primary bg-primary/[0.08] text-primary"
+                    : "border-neutral-200 text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50"
                 )}
               >
                 {CLINICAL_SPECIALTY_LABELS[s]}
-                <span className="ml-1.5 text-neutral-400">{count}</span>
+                <span className={cn("ml-1.5", active ? "text-primary/60" : "text-neutral-400")}>
+                  {count}
+                </span>
               </button>
             );
           })}
@@ -116,14 +119,16 @@ export default function StartSessionForm({
       </section>
 
       {/* Difficulty */}
-      <section>
-        <h2 className="font-poppins font-semibold text-sm text-neutral-900 mb-1">
-          Difficulty
-        </h2>
-        <p className="text-xs text-neutral-500 mb-3">
-          Tags roll out progressively — unfiltered draws from all questions.
-        </p>
-        <div className="flex flex-wrap gap-2">
+      <section className="p-6">
+        <div className="flex items-baseline justify-between gap-2 flex-wrap">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+            Difficulty
+          </p>
+          <p className="text-xs text-neutral-400">
+            Unfiltered draws from all questions.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 mt-3">
           {DIFFICULTIES.map((d) => {
             const active = difficulties.includes(d);
             return (
@@ -132,10 +137,10 @@ export default function StartSessionForm({
                 type="button"
                 onClick={() => setDifficulties(toggle(difficulties, d))}
                 className={cn(
-                  "px-3 py-1.5 rounded-full border text-xs font-medium capitalize transition-colors",
+                  "px-3 py-1.5 rounded-full border text-xs font-medium capitalize transition-all duration-200 active:scale-[0.98]",
                   active
-                    ? "border-primary bg-primary/8 text-primary"
-                    : "border-neutral-200 text-neutral-600 hover:border-neutral-300"
+                    ? "border-primary bg-primary/[0.08] text-primary"
+                    : "border-neutral-200 text-neutral-600 hover:border-neutral-300 hover:bg-neutral-50"
                 )}
               >
                 {d}
@@ -145,13 +150,13 @@ export default function StartSessionForm({
         </div>
       </section>
 
-      {/* Attempt-based filters */}
-      <section>
-        <h2 className="font-poppins font-semibold text-sm text-neutral-900 mb-3">
+      {/* Focus */}
+      <section className="p-6">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
           Focus
-        </h2>
-        <div className="space-y-2">
-          <label className="flex items-center gap-3 text-sm text-neutral-700 cursor-pointer">
+        </p>
+        <div className="space-y-2 mt-3">
+          <label className="flex items-center gap-3 text-sm text-neutral-700 cursor-pointer rounded-md px-2 py-1.5 -mx-2 hover:bg-neutral-50 transition-colors">
             <input
               type="checkbox"
               checked={unseenOnly}
@@ -165,8 +170,10 @@ export default function StartSessionForm({
           </label>
           <label
             className={cn(
-              "flex items-center gap-3 text-sm cursor-pointer",
-              hasAttempts ? "text-neutral-700" : "text-neutral-400 cursor-not-allowed"
+              "flex items-center gap-3 text-sm rounded-md px-2 py-1.5 -mx-2 transition-colors",
+              hasAttempts
+                ? "text-neutral-700 cursor-pointer hover:bg-neutral-50"
+                : "text-neutral-400 cursor-not-allowed"
             )}
           >
             <input
@@ -189,20 +196,31 @@ export default function StartSessionForm({
         </div>
       </section>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-md px-4 py-3">
-          {error}
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={handleStart}
-        disabled={pending}
-        className="w-full py-3 bg-primary text-white font-poppins font-medium text-sm rounded-md hover:bg-primary-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        {pending ? "Starting…" : `Start ${length}-question session`}
-      </button>
+      {/* Submit */}
+      <section className="p-6 space-y-3">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-md px-4 py-3">
+            {error}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={handleStart}
+          disabled={pending}
+          className="group w-full py-3 bg-primary text-white font-poppins font-medium text-sm rounded-md shadow-sm hover:bg-primary-hover active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+        >
+          {pending ? (
+            "Starting…"
+          ) : (
+            <>
+              Start {length}-question session
+              <span aria-hidden className="inline-block transition-transform duration-200 group-hover:translate-x-0.5">
+                →
+              </span>
+            </>
+          )}
+        </button>
+      </section>
     </div>
   );
 }
