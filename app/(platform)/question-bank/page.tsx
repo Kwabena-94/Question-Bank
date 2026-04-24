@@ -30,9 +30,9 @@ export default async function QuestionBankPage() {
     .eq("source", "question_bank");
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6">
       <div>
-        <h1 className="font-poppins text-2xl font-semibold text-neutral-900">
+        <h1 className="font-poppins text-2xl font-semibold text-neutral-900 tracking-tight">
           Question Bank
         </h1>
         <p className="text-neutral-500 text-sm mt-1">

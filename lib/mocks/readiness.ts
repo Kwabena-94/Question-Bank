@@ -70,11 +70,3 @@ export async function recomputeReadiness(
   });
 }
 
-export const READINESS_SPEC_ORDER: ClinicalSpecialty[] = [
-  "medicine",
-  "surgery",
-  "peds",
-  "obgyn",
-  "psych",
-  "pop_health",
-];
