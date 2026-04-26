@@ -35,7 +35,12 @@
       "Bash(curl -s -o /dev/null -w \"GET / → %{http_code}\\\\n\" http://localhost:3000/)",
       "Bash(curl -s -o /dev/null -w \"GET /question-bank → %{http_code} \\(redirect: %{redirect_url}\\)\\\\n\" -L --max-redirs 0 http://localhost:3000/question-bank)",
       "Bash(curl -s -o /dev/null -w \"GET /mocks → %{http_code}\\\\n\" -L --max-redirs 0 http://localhost:3001/mocks)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(gh pr *)",
+      "Bash(cat tailwind.config.ts)",
+      "Bash(cat tailwind.config.js)",
+      "Bash(head -5 jsonFile.js)",
+      "Bash(ls supabase/.temp/)"
     ]
   }
 }
