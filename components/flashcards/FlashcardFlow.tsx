@@ -7,7 +7,7 @@ import ClozeCard from "./cards/ClozeCard";
 
 type Mode = "describe" | "paste";
 
-export default function FlashcardFlow() {
+export default function FlashcardFlow({ compact = false }: { compact?: boolean }) {
   const [mode, setMode] = useState<Mode>("describe");
   const [topic, setTopic] = useState("");
   const [loading, setLoading] = useState(false);
@@ -107,14 +107,34 @@ export default function FlashcardFlow() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-poppins font-semibold text-base text-neutral-900">
-          Generate a new deck
-        </h2>
-        <p className="text-neutral-500 text-sm mt-1">
-          Describe a topic or paste notes — we&apos;ll structure them into MCCQE-style cards.
-        </p>
-      </div>
+      {!compact && (
+        <div>
+          <h2 className="font-poppins font-semibold text-base text-neutral-900">
+            Generate a new deck
+          </h2>
+          <p className="text-neutral-500 text-sm mt-1">
+            Describe a topic or paste notes — we&apos;ll structure them into MCCQE-style cards.
+          </p>
+        </div>
+      )}
+
+      {compact && (
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {["Atrial fibrillation", "Prenatal screening", "Pediatric fever"].map((suggestion) => (
+            <button
+              key={suggestion}
+              type="button"
+              onClick={() => {
+                setMode("describe");
+                setTopic(suggestion);
+              }}
+              className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-left text-xs font-medium text-neutral-600 transition-colors hover:border-primary/30 hover:bg-primary/[0.04] hover:text-primary"
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="space-y-4">
         <div className="flex gap-2">

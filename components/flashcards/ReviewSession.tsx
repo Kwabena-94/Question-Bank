@@ -1,28 +1,10 @@
 "use client";
 
-// components/flashcards/ReviewSession.tsx
-//
-// Mobile-first review session.
-//
-// Flow per card:
-//   1. Show front (+ context for clinical scenes). User types recall.
-//   2. Tap "Reveal" or hit Enter — back of card slides in.
-//      Grader chip shows the AI's suggested grade (always visible if available).
-//   3. User picks Again / Hard / Good / Easy. We POST /review and advance.
-//
-// Gestures (touch only):
-//   swipe right → Good   (3)
-//   swipe left  → Again  (1)
-//   swipe up    → Hard   (2)
-//   long-press  → Easy   (4)
-//
-// In-session re-queue: when grade=1 and the API returns in_session=true,
-// we shuffle the card to the back of the local queue so the learner sees
-// it again before the session ends.
-
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import { Award, Brain, Check, Clock3, Flame, RotateCcw, Sparkles } from "lucide-react";
 import { track } from "@/lib/analytics/track";
 import {
   cacheDueCards,
@@ -59,17 +41,30 @@ const GRADE_LABEL: Record<Grade, string> = {
 };
 
 const GRADE_HINT: Record<Grade, string> = {
-  1: "<10 min",
-  2: "Sooner",
-  3: "On track",
-  4: "Later",
+  1: "1 min",
+  2: "5 min",
+  3: "15 min",
+  4: "4 days",
 };
 
-const GRADE_BTN: Record<Grade, string> = {
-  1: "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100",
-  2: "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100",
-  3: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100",
-  4: "bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100",
+const GRADE_STYLE: Record<Grade, string> = {
+  1: "border-rose-200 bg-rose-50/80 text-rose-700 hover:border-rose-300 hover:bg-rose-50",
+  2: "border-amber-200 bg-amber-50/80 text-amber-800 hover:border-amber-300 hover:bg-amber-50",
+  3: "border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50",
+  4: "border-emerald-200 bg-emerald-50/80 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50",
+};
+
+const GRADE_DOT: Record<Grade, string> = {
+  1: "bg-rose-100 text-rose-700",
+  2: "bg-amber-100 text-amber-800",
+  3: "bg-neutral-100 text-neutral-600",
+  4: "bg-emerald-100 text-emerald-700",
+};
+
+const FORMAT_LABEL: Record<CardFormat, string> = {
+  basic: "Recall",
+  cloze: "Cloze",
+  mcq: "Practice Q",
 };
 
 export default function ReviewSession({ cards: initial }: Props) {
@@ -84,15 +79,25 @@ export default function ReviewSession({ cards: initial }: Props) {
   const [online, setOnline] = useState(true);
   const [queuedCount, setQueuedCount] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [motionGrade, setMotionGrade] = useState<Grade | null>(null);
   const [tally, setTally] = useState({ reviewed: 0, again: 0, hard: 0, good: 0, easy: 0 });
   const startedAt = useRef(Date.now());
   const reviewedAny = useRef(false);
 
   const current = queue[0];
   const remaining = queue.length;
+  const totalAtStart = initial.length;
+  const done = totalAtStart - remaining;
+  const pct = totalAtStart ? Math.round((done / totalAtStart) * 100) : 0;
   const isMcq = current?.format === "mcq" && !!current.mcq_options?.length;
+  const newCount = useMemo(() => initial.filter((card) => card.is_new).length, [initial]);
+  const reviewCount = Math.max(0, initial.length - newCount);
+  const estimatedMin = Math.max(1, Math.round(initial.length * 0.33));
+  const elapsedSeconds = Math.max(0, Math.round((Date.now() - startedAt.current) / 1000));
+  const retentionScore = tally.reviewed
+    ? Math.round(((tally.good + tally.easy) / tally.reviewed) * 100)
+    : 0;
 
-  // Fire review_started once
   useEffect(() => {
     track.flashcardsReviewStarted({ due_count: initial.length });
   }, [initial.length]);
@@ -125,7 +130,6 @@ export default function ReviewSession({ cards: initial }: Props) {
     };
   }, [initial]);
 
-  // ── Grader ──────────────────────────────────────────────────────────────
   const requestGrade = useCallback(async () => {
     if (!current || !answer.trim()) return;
     setGraderLoading(true);
@@ -140,24 +144,24 @@ export default function ReviewSession({ cards: initial }: Props) {
         setGrader({ grade: json.grade as Grade, rationale: json.rationale ?? "" });
       }
     } catch {
-      // grader is optional — silently degrade
+      // Smart grading is optional; manual grading always remains available.
     } finally {
       setGraderLoading(false);
     }
   }, [current, answer]);
 
-  function onReveal() {
+  const onReveal = useCallback(() => {
     if (reveal || !current) return;
     setReveal(true);
     if (!isMcq && answer.trim()) void requestGrade();
-  }
+  }, [answer, current, isMcq, requestGrade, reveal]);
 
-  // ── Submit grade ────────────────────────────────────────────────────────
   const submit = useCallback(
     async (grade: Grade) => {
       if (!current || submitting) return;
       setSubmitting(true);
       setSubmitError(null);
+      setMotionGrade(grade);
       const accepted = grader?.grade === grade;
       try {
         let inSession = false;
@@ -172,14 +176,13 @@ export default function ReviewSession({ cards: initial }: Props) {
               grader_suggestion: grader?.grade,
             }),
           });
-          if (!res.ok) {
-            throw new Error("Review could not be saved.");
-          }
+          if (!res.ok) throw new Error("Review could not be saved.");
           const json = await res.json();
           inSession = !!json?.in_session;
         } catch (error) {
           if (navigator.onLine) {
             setSubmitError(error instanceof Error ? error.message : "Review could not be saved.");
+            setMotionGrade(null);
             return;
           }
           await queueReview({
@@ -214,24 +217,25 @@ export default function ReviewSession({ cards: initial }: Props) {
         }));
         reviewedAny.current = true;
 
-        // Advance queue
-        setQueue((q) => {
-          const [head, ...rest] = q;
-          if (inSession && head) return [...rest, head];
-          return rest;
-        });
-        setReveal(false);
-        setAnswer("");
-        setSelectedMcq(null);
-        setGrader(null);
+        window.setTimeout(() => {
+          setQueue((q) => {
+            const [head, ...rest] = q;
+            if (inSession && head) return [...rest, head];
+            return rest;
+          });
+          setReveal(false);
+          setAnswer("");
+          setSelectedMcq(null);
+          setGrader(null);
+          setMotionGrade(null);
+        }, grade === 2 ? 260 : 180);
       } finally {
-        setSubmitting(false);
+        window.setTimeout(() => setSubmitting(false), 280);
       }
     },
     [current, answer, grader, submitting]
   );
 
-  // Fire completion event when queue empties
   useEffect(() => {
     if (queue.length === 0 && reviewedAny.current) {
       const duration = Math.max(0, Math.round((Date.now() - startedAt.current) / 1000));
@@ -239,30 +243,30 @@ export default function ReviewSession({ cards: initial }: Props) {
     }
   }, [queue.length, tally]);
 
-  // ── Keyboard shortcuts ──────────────────────────────────────────────────
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!current) return;
-      if (!reveal) {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          onReveal();
-        }
+      if (e.key === " " && !isTypingTarget(e.target)) {
+        e.preventDefault();
+        if (!reveal) onReveal();
+        else submit(3);
         return;
       }
+      if (!reveal && e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        onReveal();
+        return;
+      }
+      if (!reveal) return;
       if (e.key === "1") submit(1);
       else if (e.key === "2") submit(2);
-      else if (e.key === "3" || e.key === " ") {
-        e.preventDefault();
-        submit(3);
-      } else if (e.key === "4") submit(4);
+      else if (e.key === "3") submit(3);
+      else if (e.key === "4") submit(4);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reveal, current, answer, grader]);
+  }, [current, onReveal, reveal, submit]);
 
-  // ── Touch gestures ──────────────────────────────────────────────────────
   const touch = useRef<{ x: number; y: number; t: number; longPress?: number } | null>(null);
   function onTouchStart(e: React.TouchEvent) {
     if (!reveal) return;
@@ -283,261 +287,373 @@ export default function ReviewSession({ cards: initial }: Props) {
     const ady = Math.abs(dy);
     touch.current = null;
     const THRESH = 60;
-    if (adx < THRESH && ady < THRESH) return; // tap
+    if (adx < THRESH && ady < THRESH) return;
     if (adx > ady) {
       if (dx > 0) submit(3);
       else submit(1);
-    } else {
-      if (dy < 0) submit(2);
-      // swipe down does nothing
+    } else if (dy < 0) {
+      submit(2);
     }
   }
   function onTouchMove() {
-    // any movement cancels long-press
     clearLongPress();
     if (touch.current) touch.current.longPress = undefined;
   }
 
-  // ── Empty state ─────────────────────────────────────────────────────────
   if (!current) {
     return (
-      <div className="max-w-2xl mx-auto py-12 text-center space-y-6">
-        <div className="w-16 h-16 mx-auto rounded-full bg-emerald-50 text-emerald-600 grid place-items-center text-3xl">
-          ✓
-        </div>
-        <div>
-          <h2 className="font-poppins text-2xl font-semibold text-neutral-900">
-            {reviewedAny.current ? "Session complete" : "Nothing due"}
-          </h2>
-          <p className="text-neutral-500 mt-2 text-sm">
-            {reviewedAny.current
-              ? `You reviewed ${tally.reviewed} card${tally.reviewed === 1 ? "" : "s"}.`
-              : online
-                ? "You're caught up. Generate a new deck or check back later."
-                : "You're offline and no cached reviews are currently due on this device."}
-          </p>
-          {queuedCount > 0 && (
-            <p className="text-info mt-2 text-xs">
-              {queuedCount} offline review{queuedCount === 1 ? "" : "s"} will sync when
-              connection returns.
-            </p>
-          )}
-        </div>
-        {reviewedAny.current && (
-          <div className="grid grid-cols-4 gap-2 max-w-md mx-auto">
-            <Stat label="Again" value={tally.again} tone="rose" />
-            <Stat label="Hard" value={tally.hard} tone="amber" />
-            <Stat label="Good" value={tally.good} tone="emerald" />
-            <Stat label="Easy" value={tally.easy} tone="sky" />
-          </div>
-        )}
-        <div className="flex justify-center gap-3 pt-2">
-          <Link
-            href="/flashcards"
-            className="px-5 py-2.5 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors"
-          >
-            Back to flashcards
-          </Link>
-          <button
-            onClick={() => router.refresh()}
-            className="px-5 py-2.5 rounded-lg border border-neutral-200 text-sm font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
-          >
-            Check for more
-          </button>
-        </div>
+      <div className="min-h-[calc(100vh-6rem)] px-4 py-6">
+        <CompletionScreen
+          reviewedAny={reviewedAny.current}
+          tally={tally}
+          elapsedSeconds={elapsedSeconds}
+          retentionScore={retentionScore}
+          online={online}
+          queuedCount={queuedCount}
+          onRefresh={() => router.refresh()}
+        />
       </div>
     );
   }
 
-  // ── Active card ─────────────────────────────────────────────────────────
-  const totalAtStart = initial.length;
-  const done = totalAtStart - remaining;
-  const pct = totalAtStart ? Math.round((done / totalAtStart) * 100) : 0;
-
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
-      {(!online || queuedCount > 0) && (
-        <div className="rounded-xl border border-info/15 bg-info/[0.06] px-4 py-3 text-sm text-neutral-700">
-          {!online
-            ? "Offline mode: reviews are saved on this device and will sync when you're back online."
-            : `${queuedCount} offline review${queuedCount === 1 ? "" : "s"} waiting to sync.`}
+    <div className="min-h-[calc(100vh-6rem)] bg-[radial-gradient(circle_at_50%_0%,rgba(158,14,39,0.07),transparent_32rem)] px-4 pb-8">
+      <div className="sticky top-0 z-20 -mx-4 border-b border-neutral-200/70 bg-white/78 px-4 py-3 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+              Review Session
+            </p>
+            <h1 className="truncate font-poppins text-base font-semibold text-neutral-900 sm:text-lg">
+              {sessionTitle(current)}
+            </h1>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <motion.div
+              key={tally.reviewed}
+              initial={{ scale: 0.92 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 420, damping: 20 }}
+              className="hidden items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 sm:flex"
+            >
+              <Flame className="h-3.5 w-3.5" />
+              {Math.max(1, tally.reviewed || 1)} streak
+            </motion.div>
+            <div className="rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-600">
+              {Math.min(done + 1, totalAtStart)} / {totalAtStart}
+            </div>
+            <Link
+              href="/flashcards"
+              className="rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+            >
+              End
+            </Link>
+          </div>
         </div>
-      )}
-
-      {submitError && (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          {submitError}
-        </div>
-      )}
-
-      {/* Progress */}
-      <div className="flex items-center justify-between text-xs text-neutral-500">
-        <span>
-          {done + 1} / {totalAtStart}
-        </span>
-        <Link href="/flashcards" className="hover:text-neutral-700">
-          End session
-        </Link>
-      </div>
-      <div className="h-1 bg-neutral-100 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-primary transition-all duration-300"
-          style={{ width: `${pct}%` }}
-        />
       </div>
 
-      {/* Card */}
-      <div
-        className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 shadow-sm select-none"
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        onTouchMove={onTouchMove}
-        onTouchCancel={clearLongPress}
-      >
-        {current.context && (
-          <div className="mb-4 text-xs uppercase tracking-wide text-neutral-400">
-            Scenario
+      <main className="mx-auto max-w-5xl space-y-6 pt-6">
+        {(!online || queuedCount > 0) && (
+          <div className="rounded-xl border border-info/15 bg-info/[0.06] px-4 py-3 text-sm text-neutral-700">
+            {!online
+              ? "Offline mode: reviews are saved on this device and will sync when you're back online."
+              : `${queuedCount} offline review${queuedCount === 1 ? "" : "s"} waiting to sync.`}
           </div>
         )}
-        {current.context && (
-          <p className="text-sm text-neutral-600 mb-4 leading-relaxed">{current.context}</p>
+
+        {submitError && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {submitError}
+          </div>
         )}
 
-        <CardFront
-          card={current}
-          revealed={reveal}
-          selectedMcq={selectedMcq}
-          onSelectMcq={(option) => {
-            setSelectedMcq(option);
-            setAnswer(`${option.label}. ${option.text}`);
-          }}
+        <DailyFocusStrip
+          total={totalAtStart}
+          newCount={newCount}
+          reviewCount={reviewCount}
+          estimatedMin={estimatedMin}
         />
 
-        {/* Recall input */}
+        <section className="flex justify-center">
+          <motion.div
+            key={current.id}
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            animate={cardMotion(motionGrade)}
+            exit={{ opacity: 0, x: 80 }}
+            transition={{ type: "spring", stiffness: 280, damping: 24 }}
+            className="w-full max-w-[720px]"
+          >
+            <div
+              className="group relative h-[520px] sm:h-[420px]"
+              style={{ perspective: 1000 }}
+              onTouchStart={onTouchStart}
+              onTouchEnd={onTouchEnd}
+              onTouchMove={onTouchMove}
+              onTouchCancel={clearLongPress}
+            >
+              <motion.button
+                type="button"
+                onClick={() => {
+                  if (!isMcq || selectedMcq || reveal) onReveal();
+                }}
+                disabled={reveal || (isMcq && !selectedMcq)}
+                whileHover={{ rotateX: reveal ? 0 : 1.5, rotateY: reveal ? 0 : -1.5, y: -3 }}
+                whileTap={{ scale: 0.992 }}
+                className="absolute inset-0 w-full rounded-[1.35rem] text-left outline-none [transform-style:preserve-3d] disabled:cursor-default"
+                animate={{ rotateY: reveal ? 180 : 0 }}
+                transition={{ type: "spring", stiffness: 260, damping: 24 }}
+                style={{ transformStyle: "preserve-3d" }}
+              >
+                <CardFace
+                  side="front"
+                  card={current}
+                  reveal={false}
+                  selectedMcq={selectedMcq}
+                  onSelectMcq={(option) => {
+                    setSelectedMcq(option);
+                    setAnswer(`${option.label}. ${option.text}`);
+                  }}
+                />
+                <CardFace
+                  side="back"
+                  card={current}
+                  reveal
+                  selectedMcq={selectedMcq}
+                  onSelectMcq={(option) => {
+                    setSelectedMcq(option);
+                    setAnswer(`${option.label}. ${option.text}`);
+                  }}
+                  grader={grader}
+                  graderLoading={graderLoading}
+                />
+              </motion.button>
+            </div>
+          </motion.div>
+        </section>
+
         {!reveal && !isMcq && (
-          <div className="mt-6 space-y-3">
-            <label className="text-xs uppercase tracking-wide text-neutral-400">
+          <div className="mx-auto max-w-[720px] space-y-3">
+            <label className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
               Your recall
             </label>
             <textarea
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
-              rows={3}
-              placeholder="Type what you remember… (optional)"
-              className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 resize-none"
+              rows={2}
+              placeholder="Type what you remember, then press Space to reveal"
+              className="w-full resize-none rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm shadow-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
-            <button
-              onClick={onReveal}
-              className="w-full py-3 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors"
-            >
-              Reveal answer
-            </button>
           </div>
         )}
 
         {!reveal && isMcq && (
-          <div className="mt-6">
-            <button
-              onClick={onReveal}
-              disabled={!selectedMcq}
-              className="w-full py-3 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:hover:bg-primary"
-            >
-              Submit answer
-            </button>
+          <div className="mx-auto max-w-[720px] text-center text-xs text-neutral-500">
+            Select an option, then press Space or click the card to reveal.
           </div>
         )}
 
-        {/* Reveal */}
-        {reveal && (
-          <div className="mt-6 pt-6 border-t border-neutral-100 space-y-4">
-            <div>
-              <div className="text-xs uppercase tracking-wide text-neutral-400 mb-2">
-                Answer
-              </div>
-              <p className="text-base text-neutral-900 leading-relaxed whitespace-pre-wrap">
-                {current.back}
-              </p>
+        <AnimatePresence>
+          {reveal && (
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ type: "spring", stiffness: 320, damping: 26 }}
+              className="grid grid-cols-2 gap-3 sm:grid-cols-4"
+            >
+              {([1, 2, 3, 4] as Grade[]).map((grade) => (
+                <ConfidenceButton
+                  key={grade}
+                  grade={grade}
+                  disabled={submitting}
+                  onClick={() => submit(grade)}
+                />
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <ProgressFooter pct={pct} done={done} total={totalAtStart} tally={tally} />
+      </main>
+    </div>
+  );
+}
+
+function DailyFocusStrip({
+  total,
+  newCount,
+  reviewCount,
+  estimatedMin,
+}: {
+  total: number;
+  newCount: number;
+  reviewCount: number;
+  estimatedMin: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10, scale: 0.99 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: "spring", stiffness: 240, damping: 24 }}
+      className="rounded-2xl border border-neutral-200/80 bg-white/90 p-4 shadow-card sm:p-5"
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4">
+          <div className="relative grid h-14 w-14 place-items-center rounded-full bg-primary/[0.08] text-primary">
+            <motion.span
+              className="absolute inset-0 rounded-full border border-primary/20"
+              animate={{ scale: [1, 1.12, 1], opacity: [0.75, 0.2, 0.75] }}
+              transition={{ repeat: Infinity, duration: 2.8, ease: "easeInOut" }}
+            />
+            <Brain className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+              Today's Focus
+            </p>
+            <div className="mt-1 flex flex-wrap items-baseline gap-3">
+              <span className="font-poppins text-2xl font-semibold text-neutral-900">
+                {total} cards
+              </span>
+              <span className="text-sm font-medium text-primary">{newCount} new</span>
+              <span className="text-sm text-neutral-500">{reviewCount} review</span>
             </div>
-            {current.reasoning && (
-              <div className="rounded-lg bg-info/[0.06] border border-info/15 p-3">
-                <div className="text-xs uppercase tracking-wide text-info/80 mb-1">
+          </div>
+        </div>
+        <div className="flex items-center gap-3 border-neutral-200 sm:border-l sm:pl-8">
+          <Clock3 className="h-5 w-5 text-neutral-400" />
+          <div>
+            <div className="font-poppins text-lg font-semibold text-neutral-900">
+              {estimatedMin} min
+            </div>
+            <div className="text-xs text-neutral-500">Estimated time</div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function CardFace({
+  side,
+  card,
+  reveal,
+  selectedMcq,
+  onSelectMcq,
+  grader,
+  graderLoading,
+}: {
+  side: "front" | "back";
+  card: DueCard;
+  reveal: boolean;
+  selectedMcq: FlashcardMcqOption | null;
+  onSelectMcq: (option: FlashcardMcqOption) => void;
+  grader?: { grade: Grade; rationale: string } | null;
+  graderLoading?: boolean;
+}) {
+  const isBack = side === "back";
+  return (
+    <div
+      className={`absolute inset-0 flex flex-col rounded-[1.35rem] border border-neutral-200/80 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.10)] [backface-visibility:hidden] sm:p-8 ${
+        isBack ? "[transform:rotateY(180deg)]" : ""
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-2">
+          <span className="inline-flex rounded-md bg-primary/[0.08] px-3 py-1 text-[11px] font-medium uppercase tracking-wider text-primary">
+            {card.type.replace("_", " ")}
+          </span>
+          <span className="ml-2 inline-flex rounded-md bg-neutral-100 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+            {FORMAT_LABEL[card.format]}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+          <span className={`h-2 w-2 rounded-full ${isBack ? "bg-emerald-500" : "bg-primary"}`} />
+          {isBack ? "Back" : "Front"}
+        </div>
+      </div>
+
+      {card.context && (
+        <p className="mt-5 rounded-xl border border-info/15 bg-info/[0.06] px-4 py-3 text-sm leading-relaxed text-neutral-600">
+          {card.context}
+        </p>
+      )}
+
+      <div className="flex min-h-0 flex-1 items-center justify-center py-6">
+        {isBack ? (
+          <div className="max-h-full w-full space-y-4 overflow-y-auto">
+            {card.format === "mcq" && card.mcq_options?.length ? (
+              <McqCard
+                front={card.front}
+                options={card.mcq_options}
+                selectedLabel={selectedMcq?.label ?? null}
+                revealed={reveal}
+                onSelect={onSelectMcq}
+              />
+            ) : (
+              <p className="text-center font-poppins text-2xl font-semibold leading-relaxed text-neutral-900 sm:text-3xl">
+                {card.back}
+              </p>
+            )}
+            {card.reasoning && (
+              <div className="rounded-xl border border-info/15 bg-info/[0.06] p-4">
+                <div className="text-[11px] font-medium uppercase tracking-wider text-info/80">
                   Why
                 </div>
-                <p className="text-sm text-neutral-700 leading-relaxed">
-                  {current.reasoning}
-                </p>
+                <p className="mt-1 text-sm leading-relaxed text-neutral-700">{card.reasoning}</p>
               </div>
             )}
-
-            {/* Grader chip */}
             {(graderLoading || grader) && (
-              <div className="rounded-lg bg-info/[0.06] border border-info/15 p-3 text-sm">
+              <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm">
                 {graderLoading ? (
-                  <span className="text-info/80">Grading your recall…</span>
+                  <span className="text-info/80">Scoring your recall...</span>
                 ) : grader ? (
-                  <div>
-                    <div className="text-info/90 font-medium mb-1">
+                  <>
+                    <div className="font-medium text-neutral-900">
                       Suggested: {GRADE_LABEL[grader.grade]}
                     </div>
                     {grader.rationale && (
-                      <p className="text-neutral-600 text-xs leading-relaxed">
+                      <p className="mt-1 text-xs leading-relaxed text-neutral-600">
                         {grader.rationale}
                       </p>
                     )}
-                  </div>
+                  </>
                 ) : null}
               </div>
             )}
           </div>
+        ) : (
+          <div className="w-full">
+            <CardFront card={card} selectedMcq={selectedMcq} onSelectMcq={onSelectMcq} />
+          </div>
         )}
       </div>
 
-      {/* Grade buttons */}
-      {reveal && (
-        <div className="grid grid-cols-4 gap-2 sm:gap-3">
-          {([1, 2, 3, 4] as Grade[]).map((g) => (
-            <button
-              key={g}
-              onClick={() => submit(g)}
-              disabled={submitting}
-              className={`py-3 rounded-lg border text-sm font-medium transition-colors disabled:opacity-50 ${GRADE_BTN[g]}`}
-            >
-              <div>{GRADE_LABEL[g]}</div>
-              <div className="text-[10px] opacity-70 mt-0.5">{GRADE_HINT[g]}</div>
-            </button>
-          ))}
+      {!isBack && (
+        <div className="flex items-center justify-center gap-2 text-xs text-neutral-400">
+          <RotateCcw className="h-4 w-4" />
+          {card.format === "mcq" ? "Choose an answer, then flip" : "Click or press Space to flip"}
         </div>
-      )}
-
-      {reveal && (
-        <p className="text-[11px] text-neutral-400 text-center hidden sm:block">
-          1 Again · 2 Hard · 3/Space Good · 4 Easy
-        </p>
-      )}
-      {reveal && (
-        <p className="text-[11px] text-neutral-400 text-center sm:hidden">
-          Swipe right Good · left Again · up Hard · hold Easy
-        </p>
       )}
     </div>
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────
-
 function CardFront({
   card,
-  revealed,
   selectedMcq,
   onSelectMcq,
 }: {
   card: DueCard;
-  revealed: boolean;
   selectedMcq: FlashcardMcqOption | null;
   onSelectMcq: (option: FlashcardMcqOption) => void;
 }) {
   if (card.format === "cloze") {
-    return <ClozeCard front={card.front} revealed={revealed} />;
+    return (
+      <div className="text-center">
+        <ClozeCard front={card.front} revealed={false} />
+      </div>
+    );
   }
   if (card.format === "mcq" && card.mcq_options?.length) {
     return (
@@ -545,37 +661,199 @@ function CardFront({
         front={card.front}
         options={card.mcq_options}
         selectedLabel={selectedMcq?.label ?? null}
-        revealed={revealed}
+        revealed={false}
         onSelect={onSelectMcq}
       />
     );
   }
   return (
-    <p className="text-lg sm:text-xl text-neutral-900 leading-relaxed font-medium">
+    <p className="text-center font-poppins text-2xl font-semibold leading-relaxed text-neutral-900 sm:text-4xl">
       {card.front}
     </p>
   );
 }
 
-function Stat({
-  label,
-  value,
-  tone,
+function ConfidenceButton({
+  grade,
+  disabled,
+  onClick,
 }: {
-  label: string;
-  value: number;
-  tone: "rose" | "amber" | "emerald" | "sky";
+  grade: Grade;
+  disabled: boolean;
+  onClick: () => void;
 }) {
-  const toneClass = {
-    rose: "bg-rose-50 text-rose-700",
-    amber: "bg-amber-50 text-amber-800",
-    emerald: "bg-emerald-50 text-emerald-700",
-    sky: "bg-sky-50 text-sky-700",
-  }[tone];
   return (
-    <div className={`rounded-lg ${toneClass} py-2 px-1 text-center`}>
-      <div className="text-lg font-semibold">{value}</div>
-      <div className="text-[10px] uppercase tracking-wide opacity-80">{label}</div>
+    <motion.button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.97 }}
+      transition={{ type: "spring", stiffness: 420, damping: 20 }}
+      className={`rounded-2xl border px-4 py-4 text-left shadow-sm transition-colors disabled:opacity-50 ${GRADE_STYLE[grade]}`}
+    >
+      <div className="flex items-center gap-3">
+        <span className={`grid h-9 w-9 place-items-center rounded-full ${GRADE_DOT[grade]}`}>
+          {grade === 1 ? "!" : grade === 2 ? "~" : grade === 3 ? <Check className="h-4 w-4" /> : <Award className="h-4 w-4" />}
+        </span>
+        <div>
+          <div className="font-poppins text-base font-semibold">{GRADE_LABEL[grade]}</div>
+          <div className="text-xs opacity-75">{GRADE_HINT[grade]}</div>
+        </div>
+      </div>
+    </motion.button>
+  );
+}
+
+function ProgressFooter({
+  pct,
+  done,
+  total,
+  tally,
+}: {
+  pct: number;
+  done: number;
+  total: number;
+  tally: { reviewed: number; again: number; hard: number; good: number; easy: number };
+}) {
+  return (
+    <div className="rounded-2xl border border-neutral-200/80 bg-white/90 p-4 shadow-card">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="mb-2 flex items-center justify-between text-xs text-neutral-500">
+            <span>Progress</span>
+            <span>
+              {done} / {total} · {pct}%
+            </span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-neutral-100">
+            <motion.div
+              className="h-full rounded-full bg-primary"
+              initial={{ width: 0 }}
+              animate={{ width: `${pct}%` }}
+              transition={{ type: "spring", stiffness: 180, damping: 24 }}
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-3 border-neutral-200 sm:border-l sm:pl-8">
+          <Sparkles className="h-5 w-5 text-primary" />
+          <div className="text-sm text-neutral-600">
+            <span className="font-semibold text-neutral-900">{tally.good + tally.easy}</span>{" "}
+            strong responses
+          </div>
+        </div>
+      </div>
     </div>
   );
+}
+
+function CompletionScreen({
+  reviewedAny,
+  tally,
+  elapsedSeconds,
+  retentionScore,
+  online,
+  queuedCount,
+  onRefresh,
+}: {
+  reviewedAny: boolean;
+  tally: { reviewed: number; again: number; hard: number; good: number; easy: number };
+  elapsedSeconds: number;
+  retentionScore: number;
+  online: boolean;
+  queuedCount: number;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="mx-auto flex max-w-3xl flex-col items-center justify-center py-16 text-center">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.85 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ type: "spring", stiffness: 260, damping: 18 }}
+        className="relative grid h-20 w-20 place-items-center rounded-full bg-emerald-50 text-emerald-600"
+      >
+        <motion.span
+          className="absolute inset-0 rounded-full border border-emerald-200"
+          animate={{ scale: [1, 1.18], opacity: [0.8, 0] }}
+          transition={{ repeat: 2, duration: 1.2 }}
+        />
+        <Check className="h-9 w-9" />
+      </motion.div>
+      <h2 className="mt-6 font-poppins text-3xl font-semibold text-neutral-900">
+        {reviewedAny ? "Session complete" : "Nothing due"}
+      </h2>
+      <p className="mt-2 max-w-md text-sm text-neutral-500">
+        {reviewedAny
+          ? `You reviewed ${tally.reviewed} card${tally.reviewed === 1 ? "" : "s"} in ${formatDuration(elapsedSeconds)}.`
+          : online
+            ? "You're caught up. Generate a new deck or check back later."
+            : "You're offline and no cached reviews are currently due on this device."}
+      </p>
+
+      {reviewedAny && (
+        <div className="mt-8 grid w-full grid-cols-2 gap-3 sm:grid-cols-4">
+          <CompletionStat label="Reviewed" value={tally.reviewed} />
+          <CompletionStat label="Retention" value={`${retentionScore}%`} />
+          <CompletionStat label="Again" value={tally.again} />
+          <CompletionStat label="Easy" value={tally.easy} />
+        </div>
+      )}
+
+      {queuedCount > 0 && (
+        <p className="mt-5 text-xs text-info">
+          {queuedCount} offline review{queuedCount === 1 ? "" : "s"} will sync when connection
+          returns.
+        </p>
+      )}
+
+      <div className="mt-8 flex justify-center gap-3">
+        <Link
+          href="/flashcards"
+          className="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+        >
+          Back to flashcards
+        </Link>
+        <button
+          onClick={onRefresh}
+          className="rounded-lg border border-neutral-200 px-5 py-2.5 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+        >
+          Check for more
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CompletionStat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-card">
+      <div className="font-poppins text-2xl font-semibold text-neutral-900">{value}</div>
+      <div className="mt-1 text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function cardMotion(grade: Grade | null) {
+  if (grade === 1) return { opacity: 1, x: [0, -9, 8, -5, 0], y: 0, scale: 1 };
+  if (grade === 2) return { opacity: 1, x: 0, y: [0, 4, 0], scale: 0.99 };
+  if (grade === 3) return { opacity: 0, x: 72, y: 0, scale: 0.99 };
+  if (grade === 4) return { opacity: 0, x: 128, y: -8, scale: 1.02 };
+  return { opacity: 1, x: 0, y: 0, scale: 1 };
+}
+
+function sessionTitle(card: DueCard) {
+  const raw = card.type.replace("_", " ");
+  return `${raw.charAt(0).toUpperCase()}${raw.slice(1)} • Review`;
+}
+
+function formatDuration(seconds: number) {
+  const mins = Math.max(1, Math.round(seconds / 60));
+  return `${mins} min`;
+}
+
+function isTypingTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable;
 }
