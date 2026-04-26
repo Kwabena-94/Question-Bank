@@ -29,6 +29,7 @@ export interface Profile {
   full_name: string | null;
   exam_pathway: ExamTrack | null;
   teachable_user_id: string | null;
+  daily_review_cap: number;
   created_at: string;
   updated_at: string;
 }
@@ -146,12 +147,27 @@ export type CardType =
   | "differentials"
   | "referral";
 
+export type CardFormat = "basic" | "cloze" | "mcq";
+
+export interface FlashcardMcqOption {
+  label: string;
+  text: string;
+  correct: boolean;
+  explanation?: string | null;
+}
+
 export interface Flashcard {
   front: string;
   back: string;
   type: CardType;
   reasoning: string;
+  context?: string | null;
+  format?: CardFormat;
+  mcq_options?: FlashcardMcqOption[] | null;
 }
+
+// SRS grade buttons (1=Again, 2=Hard, 3=Good, 4=Easy)
+export type Grade = 1 | 2 | 3 | 4;
 
 export interface FlashcardSet {
   id: string;
@@ -231,6 +247,10 @@ export type AnalyticsEventName =
   | "mock_submitted"
   | "flashcards_generated"
   | "flashcard_flipped"
+  | "flashcards_review_started"
+  | "flashcards_review_completed"
+  | "flashcard_reviewed"
+  | "flashcard_grader_used"
   | "recommendation_viewed"
   | "recommendation_clicked"
   | "recommendation_completed"

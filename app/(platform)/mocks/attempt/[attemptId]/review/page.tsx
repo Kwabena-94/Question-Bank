@@ -72,6 +72,15 @@ export default async function MockReviewPage({ params }: PageProps) {
   const score = Math.round(Number(attempt.score ?? 0));
   const timeMin = Math.round((attempt.time_spent_seconds ?? 0) / 60);
 
+  // Pull the auto-generated mock review pack (if any) so we can show a banner.
+  const { data: reviewPackCards } = await supabase
+    .from("flashcards")
+    .select("id, set_id")
+    .eq("user_id", user.id)
+    .eq("source_mock_attempt_id", attempt.id);
+  const reviewPackCount = reviewPackCards?.length ?? 0;
+  const reviewPackSetId = reviewPackCards?.[0]?.set_id ?? null;
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -104,6 +113,30 @@ export default async function MockReviewPage({ params }: PageProps) {
           />
         </div>
       </div>
+
+      {/* Mock review deck banner — auto-generated from missed questions */}
+      {reviewPackCount > 0 && (
+        <div className="rounded-xl border border-info/20 bg-info/[0.06] p-5 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-info/80 mb-1">
+              Review deck ready
+            </p>
+            <p className="text-sm text-neutral-700">
+              We turned your {reviewPackCount} missed question
+              {reviewPackCount === 1 ? "" : "s"} into flashcards. Start spacing
+              them now while it&apos;s fresh.
+            </p>
+          </div>
+          <Link
+            href="/flashcards/review"
+            className="shrink-0 px-4 py-2 rounded-lg bg-info text-white text-sm font-medium hover:bg-info/90 transition-colors"
+          >
+            Review {reviewPackCount} card{reviewPackCount === 1 ? "" : "s"} →
+          </Link>
+          {/* keep set id for traceability without rendering it */}
+          <span className="hidden" aria-hidden data-set-id={reviewPackSetId ?? ""} />
+        </div>
+      )}
 
       {/* Per-specialty breakdown */}
       {Object.keys(domainScores).length > 0 && (

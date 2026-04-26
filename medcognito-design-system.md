@@ -2840,3 +2840,154 @@ export function ModuleCard({
 ---
 
 *This design system is derived from the MedCognito Brand Guidelines (2025, Artlas Plus) and translated for developer use. Brand source of truth: `medcognito-style-guide.md`.*
+
+---
+
+## Appendix A — Platform UI Principles (canonical: `/mocks`)
+
+The `/mocks` page is the canonical reference implementation. Every other authenticated page should feel like it belongs to the same product. When in doubt, open `/mocks` and copy the pattern.
+
+### A.1 Layout philosophy — bento, not grids
+
+- **Bento over uniform grids.** Mix tile sizes; lead with a hero tile and pair with a denser companion. Avoid `grid-cols-3` of identical cards — it reads like a placeholder dashboard.
+- **Row rhythm.** Page wrapper: `max-w-6xl mx-auto space-y-6`. Within a row: `gap-5`. Inside cards: `p-6` (default), `p-5` (compact).
+- **Equal split first.** When two cards sit side by side, default to `lg:grid-cols-2` unless one is genuinely a hero (then `lg:grid-cols-5` with `lg:col-span-3 / col-span-2`). Squeezing a data viz into 2 of 5 columns is the #1 cause of "this card feels cramped" feedback.
+- **Asymmetric Row 3.** Builders/forms get more room than supporting lists (e.g. `lg:col-span-3` builder + `lg:col-span-2` history).
+
+### A.2 Card vocabulary
+
+Default card surface — memorize this:
+
+```
+rounded-xl bg-white border border-neutral-200/70 shadow-card hover:shadow-card-hover transition-shadow duration-200 p-6
+```
+
+- **Borders:** `border-neutral-200/70` (not solid `border-neutral-200`) — softer separation.
+- **Hover shadow:** every card lifts on hover, even non-clickable ones. The motion telegraphs "alive."
+- **Internal dividers:** `border-t border-neutral-100` (not `border-neutral-200`) for sub-sections inside a card.
+- **Vertical separators between stat cells:** `grid grid-cols-2 gap-0 divide-x divide-neutral-100` with `pr-5` / `pl-5` cells.
+
+### A.3 Color semantics (override the generic palette in this doc)
+
+The platform layer assigns specific meaning beyond the brand palette:
+
+| Token | Hex | Use |
+|---|---|---|
+| `primary` | `#9E0E27` | Primary CTAs (Start mock, Submit). One per surface. |
+| `accent` | `#FE7406` | In-progress / resume affordances **only**. Never decorative. |
+| `info` | `#145A79` | "Smart" / intelligent functionality (recommendation strip, custom-quiz CTA, "View trend" link). |
+| `neutral-100` `#F4F2EF` | Page background. |
+| `neutral-200/70` | Default card border. |
+| `neutral-100` (border) | Internal divider. |
+
+**Never use the literal word "AI" in user-facing copy.** Say "Smart Recommendation," "Suggested next mock," "Recommended for you." The intelligence is implied by the info-blue gradient and sparkle icon.
+
+### A.4 Smart Recommendation strip
+
+The visual signature for surfaced insight. Reuse — do not redesign.
+
+```jsx
+<section
+  className="rounded-xl p-5 text-white shadow-card flex items-center gap-5 flex-wrap transition-shadow duration-200 hover:shadow-card-hover"
+  style={{ background: "linear-gradient(135deg, #145A79 0%, #0F445C 60%, #0C3A4F 100%)" }}
+>
+  <div className="flex items-center justify-center w-10 h-10 rounded-full bg-white/10 flex-shrink-0 border border-white/15">
+    <SparkleIcon className="w-4 h-4" />
+  </div>
+  <div className="flex-1 min-w-[240px]">
+    <p className="text-[11px] font-medium uppercase tracking-wider text-white/70">
+      Smart Recommendation
+    </p>
+    <p className="font-poppins font-semibold text-sm mt-0.5 leading-snug">{reason}</p>
+  </div>
+  {/* primary CTA — `bg-white text-info` */}
+</section>
+```
+
+### A.5 Micro-interactions (mandatory on interactive elements)
+
+| Element | Class |
+|---|---|
+| All buttons / links that act | `active:scale-[0.98] transition-all duration-200` |
+| All cards | `hover:shadow-card-hover transition-shadow duration-200` |
+| Arrow on link CTAs | wrap link in `group`, arrow in `transition-transform duration-200 group-hover:translate-x-0.5` |
+| Primary CTA inside hero | adds `group-hover:translate-x-0.5` so the whole card "leans in" on hover |
+| Progress bars | `transition-all duration-1000 ease-out` (animate on mount/data change) |
+| Donut / radial | mount-animate via `useEffect` + `requestAnimationFrame` setting `stroke-dashoffset` with `transition: stroke-dashoffset 900ms cubic-bezier(0.22, 1, 0.36, 1)` |
+| Trend / sparkline | hover crosshair + tooltip (see `ExamReadinessCard.tsx`) |
+
+Avoid bare `transition-colors` — use `transition-all duration-200` so scale/translate/shadow all animate together.
+
+### A.6 Typography rules
+
+- **Headings:** always `font-poppins`. Page h1: `text-2xl font-semibold tracking-tight`. Card h2: `font-poppins font-semibold text-base`.
+- **Kicker / overline:** `text-[11px] font-medium uppercase tracking-wider`. Color = context (primary, info, white/70).
+- **Helper text:** `text-sm text-neutral-500` body, `text-xs text-neutral-500` secondary, `text-xs text-neutral-400` tertiary.
+- **Body uses Manrope (default `font-sans`).** Don't apply `font-poppins` to paragraphs.
+
+### A.7 Chips and pills
+
+- Filter chip (selectable): `px-3 py-1.5 rounded-full border text-xs font-medium`. Active = `border-primary bg-primary/8 text-primary`. Hover = `border-neutral-300`.
+- Info chip (read-only stat in hero): `px-3 py-1.5 rounded-md text-xs font-medium text-neutral-700 bg-neutral-50 border border-neutral-200/70`, icon prefix in `text-neutral-400`.
+- Status pill (kicker): `inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-primary bg-primary/[0.08] rounded-full px-2.5 py-1`.
+
+### A.8 Buttons
+
+| Variant | Classes |
+|---|---|
+| Primary (one per surface) | `inline-flex items-center gap-2 px-4 py-2.5 rounded-md text-sm font-poppins font-medium text-white bg-primary shadow-sm hover:bg-primary-hover active:scale-[0.98] transition-all duration-200` |
+| Smart (info-tinted ghost) | `… text-info border border-info/25 bg-info/[0.04] hover:bg-info/[0.08] hover:border-info/40 active:scale-[0.98] transition-all duration-200` |
+| Resume (accent) | `… bg-accent text-white shadow-sm hover:opacity-95 active:scale-[0.98] transition-all duration-200` |
+| Tertiary (icon link in header) | `inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors` |
+
+### A.9 In-flow status surfaces
+
+- **In-progress banner** (`InProgressBanner`): `bg-accent-light border border-accent/25`, accent-tinted. Renders **above Row 1**, never inside it.
+- **Empty state inside a card:** centered, `py-8 text-center`, primary line `text-sm text-neutral-500`, secondary `text-xs text-neutral-400 mt-1`.
+
+### A.10 Data viz
+
+Charts are interactive by default. Static SVGs feel dead.
+
+- **Donut:** size 124, stroke 12, mount-animate, group-hover scale `1.02`.
+- **Trend line:** dashed (`strokeDasharray="4 4"`), info color, gradient fill below, end-point callout pill (hidden during hover), Y gridlines at 0/50/100, up to 5 X-axis date ticks.
+- **Hover state:** `useRef<SVGSVGElement>` + `useState<number | null>` for hover index; nearest-point lookup on `onMouseMove`; render dashed crosshair + absolute-positioned tooltip with `translate(-50%, -100%)`.
+
+Reference: `components/mocks/ExamReadinessCard.tsx`.
+
+### A.11 What we do NOT do
+
+- ❌ Generic icon-on-color-square buttons (use real Lucide/inline SVG icons).
+- ❌ Uniform N-up card grids for everything.
+- ❌ The literal string "AI" in copy. Say "Smart" / "Recommended."
+- ❌ `transition-colors` alone on interactive elements — always `transition-all`.
+- ❌ Decorative orange. Accent = in-progress only.
+- ❌ Static progress bars/donuts. Always animate on mount.
+- ❌ Inventing fake metrics in placeholders. Fetch real data or use a designed empty state.
+
+---
+
+## Appendix B — AI-native architecture invariants
+
+The product surfaces personalized insight today via deterministic rules. Tomorrow, an LLM. The UI must not change when we swap.
+
+- **Stable return shapes.** A recommender (e.g. `getMockRecommendations(supabase, userId)`) returns a fixed-shape object. v2 swaps the writer, not the consumer.
+- **Cache table per insight kind.** `user_insights(user_id, kind, payload jsonb, computed_at)` with `unique(user_id, kind)` and RLS `auth.uid() = user_id`. Upserts are best-effort — never block UI on cache write.
+- **Recency-weighted scoring.** 30-day half-life on attempt-derived metrics; never naive averages.
+- **Separation of concerns.** `lib/<domain>/recommend.ts` writes the insight; the page reads it. No prompt-engineering details leak into components.
+
+---
+
+## Appendix C — File map for UI work
+
+| Need | Reference file |
+|---|---|
+| Page composition (header, rows, bento) | `app/(platform)/mocks/page.tsx` |
+| Interactive data viz (donut + trend + hover) | `components/mocks/ExamReadinessCard.tsx` |
+| In-progress banner pattern | `components/mocks/InProgressBanner.tsx` |
+| Smart Recommendation strip | inline in `app/(platform)/mocks/page.tsx` (Row 2) |
+| Filter chip + count selector form | `components/mocks/CustomMockForm.tsx` |
+| Library / index card grid | `app/(platform)/mocks/library/page.tsx` |
+| Recommender (stable shape, LLM-ready) | `lib/mocks/recommend.ts` |
+| Insight cache migration | `supabase/migrations/006_user_insights.sql` |
+

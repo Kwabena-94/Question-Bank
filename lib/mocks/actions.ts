@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import type { ClinicalSpecialty } from "@/types";
 import { recomputeReadiness } from "./readiness";
+import { generateMockReviewPack } from "@/lib/flashcards/mock-review-pack";
 
 /**
  * Start or resume an attempt for the given template.
@@ -208,7 +209,7 @@ export async function submitMockAttempt(attemptId: string) {
   const { data: attempt, error } = await supabase
     .from("mock_attempts")
     .select(
-      "id, user_id, mock_template_id, status, started_at, score, domain_scores"
+      "id, user_id, mock_template_id, status, started_at, score, domain_scores, title"
     )
     .eq("id", attemptId)
     .single();
@@ -289,6 +290,18 @@ export async function submitMockAttempt(attemptId: string) {
     await recomputeReadiness(supabase, user.id);
   } catch (e) {
     console.error("readiness recompute failed", e);
+  }
+
+  // Materialize the mock-review flashcard pack (one card per missed
+  // question). Best-effort, idempotent — never blocks the submit.
+  try {
+    await generateMockReviewPack(supabase, {
+      userId: user.id,
+      attemptId: attempt.id,
+      attemptTitle: (attempt as { title?: string | null }).title ?? null,
+    });
+  } catch (e) {
+    console.error("mock review pack failed", e);
   }
 
   return {
