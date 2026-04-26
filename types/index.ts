@@ -146,12 +146,26 @@ export type CardType =
   | "differentials"
   | "referral";
 
+export type CardFormat = "basic" | "cloze" | "mcq";
+
+export interface FlashcardMcqOption {
+  label: string;
+  text: string;
+  correct: boolean;
+}
+
 export interface Flashcard {
   front: string;
   back: string;
   type: CardType;
   reasoning: string;
+  context?: string | null;
+  format?: CardFormat;
+  mcq_options?: FlashcardMcqOption[] | null;
 }
+
+// SRS grade buttons (1=Again, 2=Hard, 3=Good, 4=Easy)
+export type Grade = 1 | 2 | 3 | 4;
 
 export interface FlashcardSet {
   id: string;
