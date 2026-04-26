@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import FlashcardFlow from "@/components/flashcards/FlashcardFlow";
+import NewDeckModal from "@/components/flashcards/NewDeckModal";
 
 export const metadata: Metadata = { title: "Flashcards — MedBuddy" };
 
@@ -76,13 +76,16 @@ export default async function FlashcardsPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="font-poppins text-2xl font-semibold text-neutral-900">
-          Flashcards
-        </h1>
-        <p className="text-neutral-500 text-sm mt-1">
-          Spaced repetition for high-yield recall.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-poppins text-2xl font-semibold text-neutral-900">
+            Flashcards
+          </h1>
+          <p className="text-neutral-500 text-sm mt-1">
+            Spaced repetition for high-yield recall.
+          </p>
+        </div>
+        <NewDeckModal />
       </div>
 
       {/* Top row: Due hero + Streak */}
@@ -162,12 +165,7 @@ export default async function FlashcardsPage() {
             <h2 className="font-poppins font-semibold text-base text-neutral-900">
               Recent decks
             </h2>
-            <Link
-              href="/flashcards/new"
-              className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
-            >
-              Make a deck
-            </Link>
+            <NewDeckModal />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {recentSets.map((s) => {
@@ -191,10 +189,24 @@ export default async function FlashcardsPage() {
         </div>
       )}
 
-      {/* Generate */}
-      <div className="rounded-xl bg-white border border-neutral-200/70 p-6 shadow-card">
-        <FlashcardFlow />
-      </div>
+      {recentSets.length === 0 && (
+        <div className="rounded-xl bg-white border border-neutral-200/70 p-6 shadow-card">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+                Start here
+              </p>
+              <h2 className="mt-1 font-poppins text-lg font-semibold text-neutral-900">
+                Build your first focused deck
+              </h2>
+              <p className="mt-1 text-sm text-neutral-500">
+                Review stays front and center; deck creation opens only when you need it.
+              </p>
+            </div>
+            <NewDeckModal variant="primary" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
