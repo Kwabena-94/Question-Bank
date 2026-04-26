@@ -22,6 +22,12 @@ build/
 *.tsbuildinfo
 next-env.d.ts
 
+# supabase CLI scratch
+supabase/.temp/
+
+# legacy data dump (do not commit; ~3.8MB)
+jsonFile.js
+
 # misc
 .DS_Store
 *.pem
