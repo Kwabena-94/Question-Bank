@@ -6,7 +6,7 @@ import type { CardFormat, FlashcardMcqOption } from "@/types";
 
 export const metadata: Metadata = { title: "Review — MedBuddy" };
 
-const DAILY_CAP = 100;
+const DEFAULT_DAILY_CAP = 100;
 
 interface CardRow {
   id: string;
@@ -30,15 +30,23 @@ export default async function FlashcardsReviewPage() {
   const user = await requireAuth();
   const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("flashcards")
-    .select(
-      `id, set_id, position, format, type, context, front, back, reasoning, mcq_options, created_at,
-       state:flashcard_card_state!left(due_at, ease, interval_days, reps, lapses)`
-    )
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true })
-    .limit(500);
+  const [{ data: profile }, { data }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("daily_review_cap")
+      .eq("id", user.id)
+      .single(),
+    supabase
+      .from("flashcards")
+      .select(
+        `id, set_id, position, format, type, context, front, back, reasoning, mcq_options, created_at,
+         state:flashcard_card_state!left(due_at, ease, interval_days, reps, lapses)`
+      )
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(500),
+  ]);
+  const dailyCap = profile?.daily_review_cap ?? DEFAULT_DAILY_CAP;
 
   const nowIso = new Date().toISOString();
   const cards = ((data ?? []) as unknown as CardRow[])
@@ -48,7 +56,7 @@ export default async function FlashcardsReviewPage() {
       return { r, stateRaw, isDue };
     })
     .filter((x) => x.isDue)
-    .slice(0, DAILY_CAP)
+    .slice(0, dailyCap)
     .map(({ r, stateRaw }) => ({
       id: r.id,
       set_id: r.set_id,

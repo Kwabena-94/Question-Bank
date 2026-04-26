@@ -16,6 +16,8 @@ export default async function HomePage() {
     { count: mocksCompleted },
     { data: attempts },
     { data: inProgressMock },
+    { data: cardCountRows, count: totalCards },
+    { data: states },
   ] = await Promise.all([
     supabase
       .from("readiness_scores")
@@ -42,7 +44,24 @@ export default async function HomePage() {
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from("flashcards")
+      .select("id", { count: "exact" })
+      .eq("user_id", user.id),
+    supabase
+      .from("flashcard_card_state")
+      .select("due_at")
+      .eq("user_id", user.id),
   ]);
+  // Discard the body of the cards count query — we only need the count.
+  void cardCountRows;
+
+  const nowIso = new Date().toISOString();
+  const totalCardCount = totalCards ?? 0;
+  const stateRows = states ?? [];
+  const dueFromState = stateRows.filter((s) => !s.due_at || s.due_at <= nowIso).length;
+  const newCardCount = Math.max(0, totalCardCount - stateRows.length);
+  const dueCount = Math.min(100, dueFromState + newCardCount);
 
   const qbCount = attempts?.length ?? 0;
   const correctCount = (attempts ?? []).filter((a) => a.is_correct).length;
@@ -147,7 +166,7 @@ export default async function HomePage() {
             </span>
           </Link>
           <Link
-            href="/flashcards"
+            href={dueCount > 0 ? "/flashcards/review" : "/flashcards"}
             className="rounded-xl bg-white border border-neutral-200/70 shadow-card hover:shadow-card-hover transition-all duration-200 p-5 group active:scale-[0.995] flex items-start gap-3"
           >
             <div className="flex items-center justify-center w-9 h-9 rounded-md bg-accent-light text-accent flex-shrink-0">
@@ -158,12 +177,22 @@ export default async function HomePage() {
                 Smart flashcards
               </p>
               <p className="text-xs text-neutral-500 mt-0.5">
-                Auto-generated from your gaps
+                {dueCount > 0
+                  ? `${dueCount} card${dueCount === 1 ? "" : "s"} due now`
+                  : totalCardCount > 0
+                  ? "You're caught up"
+                  : "Auto-generated from your gaps"}
               </p>
             </div>
-            <span aria-hidden className="text-neutral-400 transition-transform duration-200 group-hover:translate-x-0.5 self-center">
-              →
-            </span>
+            {dueCount > 0 ? (
+              <span className="self-center inline-flex items-center justify-center min-w-[28px] h-6 px-2 rounded-full bg-accent text-white text-[11px] font-semibold">
+                {dueCount}
+              </span>
+            ) : (
+              <span aria-hidden className="text-neutral-400 transition-transform duration-200 group-hover:translate-x-0.5 self-center">
+                →
+              </span>
+            )}
           </Link>
         </div>
       </section>

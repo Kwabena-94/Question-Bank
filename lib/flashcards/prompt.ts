@@ -9,10 +9,10 @@
 // model changes — old cache entries become inaccessible (and naturally expire
 // after 30 days).
 
-import type { CardType } from "@/types";
+import type { CardFormat, CardType } from "@/types";
 
 // IMPORTANT: bump this when the prompt content, model, or temperature changes.
-export const PROMPT_VERSION = "2026-04-26.v1";
+export const PROMPT_VERSION = "2026-04-26.v2";
 
 // Model + sampling parameters. Encoded into the version above so changes
 // invalidate the cache.
@@ -29,6 +29,8 @@ export const ALLOWED_CARD_TYPES: readonly CardType[] = [
   "differentials",
   "referral",
 ];
+
+export const ALLOWED_CARD_FORMATS: readonly CardFormat[] = ["basic", "cloze", "mcq"];
 
 // ── System block 1: MCC framework ───────────────────────────────────────────
 const MCC_FRAMEWORK =
@@ -100,6 +102,14 @@ const CARD_FORMAT_RULES =
   "- front: question or challenge; clinical cards use MCC vignette style\n" +
   "- back: direct answer, under 50 words\n" +
   "- reasoning: 1-2 sentences, cite Canadian guideline by name, under 40 words\n\n" +
+  "Choose the best format per card:\n" +
+  "- basic: definition, recall, single-fact mastery\n" +
+  "- cloze: clinical vignettes where 1-2 key terms are the high-yield retrieval " +
+  "target. Format the front with {{c1::answer}} markers. Back must list the same " +
+  "terms in order.\n" +
+  "- mcq: when the topic has 3 clinically-meaningful distractors. Provide 4 " +
+  "options with exactly 1 correct=true.\n" +
+  "Aim for about 50% basic, 30% cloze, and 20% mcq across a 10-card set.\n\n" +
   "Never repeat same card type more than 3 times. " +
   "Flag Choosing Wisely Canada on investigation cards.";
 
@@ -118,12 +128,28 @@ export const FLASHCARD_TOOL = {
           type: "object",
           properties: {
             type: { type: "string", enum: [...ALLOWED_CARD_TYPES] },
+            format: { type: "string", enum: [...ALLOWED_CARD_FORMATS] },
             context: { type: "string" },
             front: { type: "string" },
             back: { type: "string" },
             reasoning: { type: "string" },
+            mcq_options: {
+              type: "array",
+              minItems: 4,
+              maxItems: 4,
+              items: {
+                type: "object",
+                properties: {
+                  label: { type: "string" },
+                  text: { type: "string" },
+                  correct: { type: "boolean" },
+                  explanation: { type: "string" },
+                },
+                required: ["label", "text", "correct"],
+              },
+            },
           },
-          required: ["type", "context", "front", "back", "reasoning"],
+          required: ["type", "format", "context", "front", "back", "reasoning"],
         },
       },
     },

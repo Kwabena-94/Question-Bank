@@ -40,7 +40,13 @@
       "Bash(cat tailwind.config.ts)",
       "Bash(cat tailwind.config.js)",
       "Bash(head -5 jsonFile.js)",
-      "Bash(ls supabase/.temp/)"
+      "Bash(ls supabase/.temp/)",
+      "Bash(ls supabase/migrations/)",
+      "Bash(ls lib/flashcards/)",
+      "Bash(ls lib/ai)",
+      "Bash(ls lib/llm)",
+      "Bash(awk 'NR<177 || NR>418' docs/flashcards-v2-handover.md)",
+      "Read(//tmp/**)"
     ]
   }
 }

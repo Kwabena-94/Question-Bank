@@ -12,6 +12,7 @@ import {
   type Question,
 } from "@/types";
 import { track } from "@/lib/analytics/track";
+import RememberThisPrompt from "./RememberThisPrompt";
 
 type OptionKey = "a" | "b" | "c" | "d" | "e";
 
@@ -35,6 +36,8 @@ export default function SessionRunner({ sessionId, questions }: Props) {
   const [pending, startTransition] = useTransition();
   const [startedAt, setStartedAt] = useState<number>(() => Date.now());
   const [error, setError] = useState<string | null>(null);
+  const [wrongStreak, setWrongStreak] = useState(0);
+  const [coverageByQ, setCoverageByQ] = useState<Record<string, boolean>>({});
 
   const question = questions[index];
   const isLast = index === questions.length - 1;
@@ -86,6 +89,33 @@ export default function SessionRunner({ sessionId, questions }: Props) {
           session_id: sessionId,
           source: "manual",
         });
+        // Wrong-streak tracker for "Remember this?" escalation.
+        if (r.isCorrect) {
+          setWrongStreak(0);
+        } else {
+          setWrongStreak((s) => s + 1);
+          // Lazy coverage check (only on wrong answers)
+          const topicHint = [
+            question.clinical_specialty ?? null,
+            question.content.slice(0, 60),
+          ]
+            .filter(Boolean)
+            .join(" ");
+          fetch("/api/flashcards/coverage", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question_id: question.id, topic_hint: topicHint }),
+          })
+            .then((r2) => (r2.ok ? r2.json() : null))
+            .then((j) => {
+              if (j && typeof j.covered === "boolean") {
+                setCoverageByQ((prev) => ({ ...prev, [question.id]: j.covered }));
+              }
+            })
+            .catch(() => {
+              /* silent */
+            });
+        }
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Failed to record answer.");
       }
@@ -210,6 +240,15 @@ export default function SessionRunner({ sessionId, questions }: Props) {
             <div className="prose prose-sm max-w-none text-neutral-700 whitespace-pre-wrap">
               {question.explanation}
             </div>
+
+            {/* Remember this? — only on wrong answers, only when not already covered.
+                Escalated copy after 3 consecutive wrong answers. */}
+            {!result.isCorrect && coverageByQ[question.id] === false && (
+              <RememberThisPrompt
+                questionId={question.id}
+                escalated={wrongStreak >= 3}
+              />
+            )}
           </div>
         )}
 

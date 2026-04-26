@@ -29,6 +29,7 @@ export interface Profile {
   full_name: string | null;
   exam_pathway: ExamTrack | null;
   teachable_user_id: string | null;
+  daily_review_cap: number;
   created_at: string;
   updated_at: string;
 }
@@ -152,6 +153,7 @@ export interface FlashcardMcqOption {
   label: string;
   text: string;
   correct: boolean;
+  explanation?: string | null;
 }
 
 export interface Flashcard {

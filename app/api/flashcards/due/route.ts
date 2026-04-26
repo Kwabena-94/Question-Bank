@@ -12,7 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
-const DAILY_CAP = 100;
+const DEFAULT_DAILY_CAP = 100;
 
 interface DueRow {
   id: string;
@@ -45,15 +45,23 @@ export async function GET() {
 
   // Pull cards + (optional) state for this user. RLS keeps it scoped.
   const nowIso = new Date().toISOString();
-  const { data, error } = await supabase
-    .from("flashcards")
-    .select(
-      `id, set_id, position, format, type, context, front, back, reasoning, mcq_options,
-       state:flashcard_card_state!left(ease, interval_days, due_at, reps, lapses)`
-    )
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true })
-    .limit(500);
+  const [{ data: profile }, { data, error }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("daily_review_cap")
+      .eq("id", user.id)
+      .single(),
+    supabase
+      .from("flashcards")
+      .select(
+        `id, set_id, position, format, type, context, front, back, reasoning, mcq_options,
+         state:flashcard_card_state!left(ease, interval_days, due_at, reps, lapses)`
+      )
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(500),
+  ]);
+  const dailyCap = profile?.daily_review_cap ?? DEFAULT_DAILY_CAP;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -69,7 +77,7 @@ export async function GET() {
       return { row: r, state: stateRaw, isDue };
     })
     .filter((x) => x.isDue)
-    .slice(0, DAILY_CAP)
+    .slice(0, dailyCap)
     .map(({ row, state }) => ({
       id: row.id,
       set_id: row.set_id,
@@ -90,7 +98,7 @@ export async function GET() {
 
   return NextResponse.json({
     cards: due,
-    cap: DAILY_CAP,
+    cap: dailyCap,
     total_due: due.length,
   });
 }

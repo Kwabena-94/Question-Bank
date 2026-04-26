@@ -21,10 +21,12 @@
 // it again before the session ends.
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { track } from "@/lib/analytics/track";
 import type { CardFormat, FlashcardMcqOption, Grade } from "@/types";
+import ClozeCard from "./cards/ClozeCard";
+import McqCard from "./cards/McqCard";
 
 interface DueCard {
   id: string;
@@ -69,6 +71,7 @@ export default function ReviewSession({ cards: initial }: Props) {
   const [queue, setQueue] = useState<DueCard[]>(initial);
   const [reveal, setReveal] = useState(false);
   const [answer, setAnswer] = useState("");
+  const [selectedMcq, setSelectedMcq] = useState<FlashcardMcqOption | null>(null);
   const [grader, setGrader] = useState<{ grade: Grade; rationale: string } | null>(null);
   const [graderLoading, setGraderLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -78,6 +81,7 @@ export default function ReviewSession({ cards: initial }: Props) {
 
   const current = queue[0];
   const remaining = queue.length;
+  const isMcq = current?.format === "mcq" && !!current.mcq_options?.length;
 
   // Fire review_started once
   useEffect(() => {
@@ -108,7 +112,7 @@ export default function ReviewSession({ cards: initial }: Props) {
   function onReveal() {
     if (reveal || !current) return;
     setReveal(true);
-    if (answer.trim()) void requestGrade();
+    if (!isMcq && answer.trim()) void requestGrade();
   }
 
   // ── Submit grade ────────────────────────────────────────────────────────
@@ -162,6 +166,7 @@ export default function ReviewSession({ cards: initial }: Props) {
         });
         setReveal(false);
         setAnswer("");
+        setSelectedMcq(null);
         setGrader(null);
       } finally {
         setSubmitting(false);
@@ -320,10 +325,18 @@ export default function ReviewSession({ cards: initial }: Props) {
           <p className="text-sm text-neutral-600 mb-4 leading-relaxed">{current.context}</p>
         )}
 
-        <CardFront card={current} />
+        <CardFront
+          card={current}
+          revealed={reveal}
+          selectedMcq={selectedMcq}
+          onSelectMcq={(option) => {
+            setSelectedMcq(option);
+            setAnswer(`${option.label}. ${option.text}`);
+          }}
+        />
 
         {/* Recall input */}
-        {!reveal && (
+        {!reveal && !isMcq && (
           <div className="mt-6 space-y-3">
             <label className="text-xs uppercase tracking-wide text-neutral-400">
               Your recall
@@ -340,6 +353,18 @@ export default function ReviewSession({ cards: initial }: Props) {
               className="w-full py-3 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors"
             >
               Reveal answer
+            </button>
+          </div>
+        )}
+
+        {!reveal && isMcq && (
+          <div className="mt-6">
+            <button
+              onClick={onReveal}
+              disabled={!selectedMcq}
+              className="w-full py-3 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:hover:bg-primary"
+            >
+              Submit answer
             </button>
           </div>
         )}
@@ -422,34 +447,29 @@ export default function ReviewSession({ cards: initial }: Props) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-function CardFront({ card }: { card: DueCard }) {
+function CardFront({
+  card,
+  revealed,
+  selectedMcq,
+  onSelectMcq,
+}: {
+  card: DueCard;
+  revealed: boolean;
+  selectedMcq: FlashcardMcqOption | null;
+  onSelectMcq: (option: FlashcardMcqOption) => void;
+}) {
   if (card.format === "cloze") {
-    // Render {{c1::hidden}} as a blank in the front view.
-    const masked = card.front.replace(/\{\{c\d+::([^}]*)\}\}/g, "[ … ]");
-    return (
-      <p className="text-lg sm:text-xl text-neutral-900 leading-relaxed font-medium">
-        {masked}
-      </p>
-    );
+    return <ClozeCard front={card.front} revealed={revealed} />;
   }
   if (card.format === "mcq" && card.mcq_options?.length) {
     return (
-      <div className="space-y-3">
-        <p className="text-base sm:text-lg text-neutral-900 leading-relaxed font-medium">
-          {card.front}
-        </p>
-        <ul className="space-y-2">
-          {card.mcq_options.map((opt) => (
-            <li
-              key={opt.label}
-              className="flex gap-3 px-3 py-2 rounded-lg border border-neutral-200 text-sm text-neutral-700"
-            >
-              <span className="font-medium text-neutral-500">{opt.label}.</span>
-              <span>{opt.text}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      <McqCard
+        front={card.front}
+        options={card.mcq_options}
+        selectedLabel={selectedMcq?.label ?? null}
+        revealed={revealed}
+        onSelect={onSelectMcq}
+      />
     );
   }
   return (
