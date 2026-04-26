@@ -46,7 +46,11 @@
       "Bash(ls lib/ai)",
       "Bash(ls lib/llm)",
       "Bash(awk 'NR<177 || NR>418' docs/flashcards-v2-handover.md)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(grep -oE \"PR ?3[^\\\\\"]{0,200}\")",
+      "Bash(grep -oE \"\\(PR ?[0-9][^\\\\\"]{0,300}\\)\" \"/Users/kwabena/.claude/projects/-Users-kwabena-Desktop-Digital-Assistant-Question-Bank/b0030a26-5801-4dbb-b61b-9be6a8283769.jsonl\")",
+      "Bash(grep -oE \"PR ?3[^\\\\\"]{0,500}\" \"/Users/kwabena/.claude/projects/-Users-kwabena-Desktop-Digital-Assistant-Question-Bank/b0030a26-5801-4dbb-b61b-9be6a8283769.jsonl\")",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }
