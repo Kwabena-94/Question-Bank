@@ -88,17 +88,17 @@ export default function FlashcardFlow() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="font-poppins text-2xl font-semibold text-neutral-900">
-          AI Flashcards
-        </h1>
+        <h2 className="font-poppins font-semibold text-base text-neutral-900">
+          Generate a new deck
+        </h2>
         <p className="text-neutral-500 text-sm mt-1">
-          Describe a topic or paste notes to generate structured MCCQE-style flashcards.
+          Describe a topic or paste notes — we&apos;ll structure them into MCCQE-style cards.
         </p>
       </div>
 
-      <div className="card-surface p-6 space-y-4">
+      <div className="space-y-4">
         <div className="flex gap-2">
           <button
             type="button"

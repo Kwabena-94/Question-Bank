@@ -71,6 +71,31 @@ export const track = {
   flashcardFlipped: (opts: { set_id: string; card_index: number }) =>
     trackEvent("flashcard_flipped", opts),
 
+  flashcardsReviewStarted: (opts: { due_count: number }) =>
+    trackEvent("flashcards_review_started", opts),
+
+  flashcardsReviewCompleted: (opts: {
+    reviewed: number;
+    again: number;
+    hard: number;
+    good: number;
+    easy: number;
+    duration_seconds: number;
+  }) => trackEvent("flashcards_review_completed", opts),
+
+  flashcardReviewed: (opts: {
+    card_id: string;
+    grade: 1 | 2 | 3 | 4;
+    used_grader: boolean;
+    in_session: boolean;
+  }) => trackEvent("flashcard_reviewed", opts),
+
+  flashcardGraderUsed: (opts: {
+    card_id: string;
+    suggestion: 1 | 2 | 3 | 4;
+    accepted: boolean;
+  }) => trackEvent("flashcard_grader_used", opts),
+
   recommendationViewed: (recommendation_id: string) =>
     trackEvent("recommendation_viewed", { recommendation_id }),
 

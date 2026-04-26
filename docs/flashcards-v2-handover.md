@@ -1,8 +1,17 @@
-# Flashcards v2 — Handover Notes for Subsequent Agents
+# Flashcards v2 — Handover Notes for PR 4 + PR 5
 
-> **Audience:** another coding agent (or human) picking up PRs 2–5 of the
-> flashcards rebuild. PR 1 has shipped — this doc tells you everything you
-> need to know to take the next step without re-discovering context.
+> **Audience:** another coding agent (or human) picking up **PR 4 (card formats)
+> and PR 5 (pre-warm + polish)** of the flashcards rebuild.
+>
+> **PR 1 (internal generation pipeline)** shipped in commit `f511b33`.
+> **PR 2 (SRS surface) and PR 3 (cross-platform integration)** are being executed
+> by the agent that produced this doc — when you pick up PR 4, both should be
+> on `main` (or the active feature branch). If they are NOT yet merged, stop
+> and check status before proceeding; PR 4 builds on review-session components
+> and the per-card schema that PR 2/3 finalize.
+>
+> This doc gives you everything to ship PR 4 and PR 5 without re-discovering
+> context.
 
 ---
 
@@ -165,246 +174,45 @@ is the most common reason a PR gets reverted.
 
 ---
 
-## PR 2 — SRS surface + mobile-first review
+## What PR 2 + PR 3 already shipped (your starting state)
 
-**Goal:** ship `/flashcards/review` (daily SRS queue with typed recall +
-AI grading + swipe gestures) and redesign `/flashcards` deck home.
+> If you're starting PR 4, **read the commits first**:
+> ```bash
+> git log --oneline --grep="PR [23] of flashcards"
+> ```
+> The commit messages and the files below are the contract you're building on.
+> If anything contradicts what's described here, trust the code over the doc.
 
-### Files to create
+### PR 2 — SRS surface (already on the branch)
 
-```
-lib/flashcards/
-  scheduler.ts       — SM-2 algorithm
-  grader.ts          — AI grader (Anthropic Haiku call, ~80 input / 40 output tokens)
-  actions.ts         — Server Actions: gradeCard(cardId, grade, answer_text?)
+Shipped:
+- `lib/flashcards/scheduler.ts` — SM-2 algorithm (input: prior state + grade 1–4, output: new ease/interval/due_at).
+- `lib/flashcards/grader.ts` — Anthropic Haiku call that suggests a 1–4 grade given (front, back, answer_text). Returns `null` on timeout/failure; UI must always allow manual grading.
+- `GET /api/flashcards/due` — returns due cards for the user, capped at 100/day (configurable later via `profiles.daily_review_cap`).
+- `POST /api/flashcards/review` — body `{ card_id, grade, answer_text?, grader_suggestion? }`. Upserts `flashcard_card_state`, inserts `flashcard_reviews`, fires `track.flashcardReviewed`.
+- `components/flashcards/ReviewSession.tsx` — typed-recall input → reveal → AI suggestion chip → 4-button grade with intervals shown beneath each button. Mobile gestures: swipe right=Good, left=Again, up=Hard, long-press=Easy. Buttons remain visible.
+- `app/(platform)/flashcards/review/page.tsx` — server-fetches due queue, mounts ReviewSession.
+- `app/(platform)/flashcards/page.tsx` — redesigned deck home: Due Today hero (accent orange), Streak summary, Recommendations strip (info teal), Decks grid. The legacy `FlashcardFlow` is now reached via a small "+ Make a deck" button.
+- Analytics events added to `lib/analytics/track.ts`: `flashcards_review_started`, `flashcards_review_completed`, `flashcard_reviewed`, `flashcard_grader_used`.
 
-app/api/flashcards/
-  due/route.ts       — GET: cards due now for current user, capped at daily limit
+### PR 3 — Cross-platform integration (already on the branch)
 
-app/(platform)/flashcards/
-  review/page.tsx    — entry point; server-fetches due queue then mounts ReviewSession
-  page.tsx           — REWRITE per UX spec §3.1 (Due Today + Streak hero, Recommendations, Decks grid)
+Shipped:
+- `lib/flashcards/quick-card.ts` — extracts a card from a question (no LLM): front=stem, back=correct option text, reasoning=explanation. Used by the cheap "Remember this" path.
+- `lib/flashcards/coverage.ts` — `isTopicCovered(userId, specialty, tag)` returns true if the user already has a card on that specialty+tag. Used to gate the inline QBank prompt.
+- `components/question-bank/RememberThisPrompt.tsx` — appears below the explanation when the user got the question wrong AND `isTopicCovered === false`. One tap creates the card via `/api/flashcards/quick-add`.
+- `app/api/flashcards/quick-add/route.ts` — POST `{ question_id }`. Creates card from question, inserts into the user's "From wrong answers" deck (auto-created on first use), schedules `due_at = now() + 1 day`.
+- 3-wrong escalation in QBank session: if a user gets 3+ wrongs on the same `clinical_specialty + primary_tag` in one session, the prompt upgrades from "Add card" to "Generate a 10-card refresher" which calls `/api/flashcards/generate` with `generation_mode: 'adaptive'`.
+- Post-mock review pack: `lib/mocks/actions.ts` mock-submit action now fires `void generateMockReviewPack(...)` (fire-and-forget) which generates cards from the top-3 weak topics (cache-aware). Results page reads from `flashcard_sets` and renders a banner above the domain breakdown when a pack exists.
+- `/home` due chip: small accent-orange pill `📚 N due — M min` linking to `/flashcards/review`. Estimate: `count * 0.33` minutes.
+- `/home` Smart Recommendations strip gets a "Generate from weak domain" variant when readiness identifies a domain with no recent flashcards.
+- `ExamReadinessCard` footer CTA gets a "Generate review deck →" variant when a domain has trended down >5% over 7 days AND has no flashcards in the last 14 days.
 
-components/flashcards/
-  ReviewSession.tsx  — the typed-recall + flip + grade + swipe card UI
-  DeckCard.tsx       — small card for the deck grid on /flashcards
-  DueTodayHero.tsx   — accent-orange hero with start CTA
-  StreakCard.tsx     — streak + retention summary
-```
+### Implications for PR 4
 
-### Algorithm — SM-2 reference
-
-Implement in `lib/flashcards/scheduler.ts`. Inputs: prior `ease`,
-`interval_days`, `reps`, `lapses`, plus `grade` (1=Again, 2=Hard, 3=Good, 4=Easy).
-Output: new `{ease, interval_days, due_at, reps, lapses}`.
-
-```
-if grade < 3 (Again):
-  reps = 0
-  interval_days = 0  (10 minutes — represent as due_at = now + 10min)
-  lapses += 1
-else:
-  if reps == 0: interval_days = 1
-  elif reps == 1: interval_days = 3 if grade==3 else 4
-  else: interval_days = round(prior_interval * ease * (grade==2 ? 1.2 : grade==4 ? 1.3 : 1))
-  reps += 1
-
-# Update ease (clamp to 1.3..2.5+)
-ease += grade==1 ? -0.20 : grade==2 ? -0.15 : grade==4 ? +0.10 : 0
-ease = max(1.30, ease)
-
-due_at = now + interval_days days  (or now + 10min if grade==1)
-```
-
-A reasonable open-source reference is SuperMemo SM-2; Anki's modifications
-are documented at <https://docs.ankiweb.net/deck-options.html#legacy-anki-2.0-scheduler>.
-
-### AI grader
-
-Cheap Haiku call. Input: `front`, `back`, `answer_text`. Output: a single
-integer 1–4 (the suggested grade). Prompt skeleton:
-
-```
-You are grading a medical student's free-text recall against a flashcard answer.
-FRONT: {front}
-EXPECTED ANSWER: {back}
-STUDENT ANSWER: {answer_text}
-
-Grade the recall on a 1–4 scale:
-1 = Again — wrong, key concept missed
-2 = Hard — partial, needed prompts
-3 = Good — correct, normal effort
-4 = Easy — correct, complete, immediate
-
-Respond with only the integer.
-```
-
-Wrap with `try/catch` and fall back to "no suggestion" on timeout (>1500ms)
-or parse failure. The four buttons must always be available regardless of
-grader outcome.
-
-### Endpoints
-
-```
-GET  /api/flashcards/due
-  → 200: { cards: [{...flashcard, ease, interval_days, due_at}], total_due, capped_at }
-  → reads flashcards JOIN flashcard_card_state, filtered by user_id and
-    due_at <= now(). Limit = min(100, profile.daily_review_cap or 100).
-
-POST /api/flashcards/review
-  body: { card_id, grade: 1..4, answer_text?: string, grader_suggestion?: 1..4 }
-  → 200: { next_due_at, new_interval_days, new_ease }
-  → upserts flashcard_card_state, inserts flashcard_reviews row,
-    fires track.flashcardReviewed(...)
-```
-
-### Mobile gestures
-
-Use a small custom hook in `ReviewSession.tsx` — no new deps needed.
-- `onTouchStart` records `(x, y, t)`.
-- `onTouchEnd` measures dx, dy, dt. Decision tree:
-  - `dx > 60 && |dy| < 40` → Good
-  - `dx < -60 && |dy| < 40` → Again
-  - `dy < -60 && |dx| < 40` → Hard
-  - `dt > 600 && |dx| < 30 && |dy| < 30` → Easy (long press)
-- Buttons remain visible and tappable for non-touch users.
-
-### Analytics events to add to `lib/analytics/track.ts`
-
-- `flashcards_review_started` `{queue_size}`
-- `flashcards_review_completed` `{cards_reviewed, retention}`
-- `flashcard_reviewed` `{card_id, grade, used_grader_suggestion: boolean}`
-- `flashcard_grader_used` `{card_id, suggestion, override}`
-
-### Definition of done for PR 2
-
-- `/flashcards/review` exists and loads the user's due queue.
-- Submitting a grade updates state and advances to the next card.
-- Swipe gestures work on mobile Safari and Chrome.
-- AI grader suggestion appears after reveal; user can override.
-- `/flashcards` deck home shows Due Today hero + Streak + Recommendations + Decks grid.
-- Existing `FlashcardFlow.tsx` (manual generation) still works — accessed
-  via "+ Make a deck" button on the new home.
-- `npx tsc --noEmit` clean. `npm run lint` clean.
-
----
-
-## PR 3 — Cross-platform integration
-
-**Goal:** make flashcards appear inside QBank and Mocks. This is where
-the AI-native loop lives.
-
-### Inline QBank "Remember this"
-
-**Trigger logic** (this is the rule, follow it carefully):
-
-A wrong answer in QBank surfaces the "Remember this" prompt **only when**
-all three are true:
-
-1. The user got the question wrong.
-2. The user has read the explanation (track impression with intersection observer).
-3. The topic is **not yet covered** in the user's flashcard library.
-   - Definition: no `flashcards` row for this user where `type` matches the
-     question's clinical area AND any keyword overlap exists.
-   - Concretely: on a question with `clinical_specialty='cardiology'` and
-     tag `atrial_fibrillation`, "covered" means user has at least one
-     `flashcards` row with `front` or `back` containing "atrial fibrillation"
-     OR `source_question_id` referring to a question with the same primary tag.
-
-**Escalation:** if a user gets 3+ wrongs on the same `clinical_specialty + primary_tag`
-in one QBank session, the prompt upgrades from "Add this card" (cheap, no LLM)
-to "Generate a 10-card refresher" (LLM call).
-
-**Cheap path (single wrong, topic not covered):**
-- No LLM call.
-- Build the card from the question stem + correct answer + explanation.
-- Insert directly into a synthetic deck called `"From wrong answers"` per user
-  (create on first use).
-- Set `source_question_id` on the new card.
-- Schedule with `due_at = tomorrow 8am local` (or just `now() + 1 day`).
-
-**Expensive path (3+ wrongs in same topic this session):**
-- Call `/api/flashcards/generate` server-side with
-  `{ topic: '<specialty> <primary_tag>', mode: 'describe', generation_mode: 'adaptive', source_question_id }`.
-- Show the prompt with a slow-load skeleton; cards land in the deck.
-
-### Files to create / modify
-
-```
-lib/flashcards/quick-card.ts        — extract a card from a question (no LLM)
-lib/flashcards/coverage.ts          — isTopicCovered(userId, specialty, tag)
-components/question-bank/RememberThisPrompt.tsx  — inline component below explanation
-app/api/flashcards/quick-add/route.ts            — POST {question_id} → creates card
-```
-
-The QBank explanation surface is in `components/question-bank/...` — locate
-the explanation component and mount `RememberThisPrompt` below it.
-
-### Post-mock review pack
-
-**When mock is submitted** (not when results page opens — async at submit):
-
-In the existing mock-submit Server Action (likely `lib/mocks/actions.ts`),
-after the result is finalized:
-
-```ts
-// Fire-and-forget; do NOT await — submit must not block on generation.
-void generateMockReviewPack({
-  userId,
-  mockAttemptId: attempt.id,
-  wrongAnswerIds: wrongs.map(w => w.question_id),
-  topics: weakTopicsFromAttempt(attempt),
-});
-```
-
-`generateMockReviewPack`:
-1. For each weak topic (top 3 by wrong count), check L1 cache. Reuse if hit.
-2. For misses, call Anthropic generation with `source_mock_attempt_id` set.
-3. Combine cards into a single deck named "Mock #N — Review pack".
-4. Write to `flashcard_sets` and `flashcards`.
-5. Schedule `due_at = now()` so it appears in the user's review queue immediately.
-
-On the results page (`app/(platform)/mocks/[attempt_id]/page.tsx` — locate it),
-add a section at the top:
-
-```tsx
-{reviewPack && (
-  <ReviewPackBanner
-    deck={reviewPack}
-    cardCount={reviewPack.cards.length}
-    topics={reviewPack.topic_summary}
-  />
-)}
-```
-
-The banner shows above the existing domain breakdown. Use accent-teal
-(info `#145A79`) to signal "smart-generated content".
-
-### `/home` integration
-
-1. **Due chip** — small accent-orange pill near the top of `/home`. Reads
-   `count(flashcard_card_state where user_id=me and due_at<=now())`.
-   Format: `📚 12 due — 4 min`. Estimate: `count * 0.33` minutes.
-2. **Smart Recommendations strip** gets a third recommendation type when
-   the readiness card has identified a weak domain with no recent flashcards
-   on it: `"Generate a Cardiology refresher (your weakest area)"`.
-
-### `ExamReadinessCard` footer CTA
-
-Currently shows generic "next action" links. Add a variant: when a domain
-has trended down >5% over the last 7 days AND no flashcards exist for that
-domain in the last 14 days, the CTA becomes
-`"Generate 10-card review deck →"` and routes to `/flashcards/new?topic=<domain>`.
-
-### Definition of done for PR 3
-
-- Wrong QBank answer on uncovered topic → "Remember this" prompt appears below explanation.
-- Tap "Add card" → card created, linked to `source_question_id`.
-- 3+ wrongs in same topic in one session → upgrade to LLM-generation prompt.
-- Mock submission triggers async review-pack generation.
-- Mock results page shows pre-warmed review pack banner above domain breakdown.
-- `/home` shows due-cards pill.
-- `npx tsc --noEmit` clean.
+- The per-card schema (`flashcards.format`, `flashcards.mcq_options`) is already populated by the generation pipeline — PR 4 just needs to teach the LLM to choose formats and the UI to render them.
+- `ReviewSession.tsx` will need a sub-component switch on `card.format` — basic / cloze / mcq variants.
+- `PROMPT_VERSION` bump in PR 4 invalidates all L1 cache entries naturally; this is fine, the cache rebuilds.
 
 ---
 
