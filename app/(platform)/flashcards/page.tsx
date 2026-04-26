@@ -13,7 +13,7 @@ export default async function FlashcardsPage() {
   const nowIso = new Date().toISOString();
   const since30dIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [cardsRes, statesRes, reviewsRes, setsRes] = await Promise.all([
+  const [cardsRes, statesRes, reviewsRes, setsRes, profileRes] = await Promise.all([
     supabase
       .from("flashcards")
       .select("id, created_at", { count: "exact" })
@@ -34,6 +34,11 @@ export default async function FlashcardsPage() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(8),
+    supabase
+      .from("profiles")
+      .select("daily_review_cap")
+      .eq("id", user.id)
+      .single(),
   ]);
 
   const totalCards = cardsRes.count ?? cardsRes.data?.length ?? 0;
@@ -43,7 +48,8 @@ export default async function FlashcardsPage() {
   const stateCardCount = states.length;
   const newCount = Math.max(0, totalCards - stateCardCount);
   const dueFromState = states.filter((s) => !s.due_at || s.due_at <= nowIso).length;
-  const dueCount = Math.min(100, dueFromState + newCount);
+  const dailyCap = profileRes.data?.daily_review_cap ?? 100;
+  const dueCount = Math.min(dailyCap, dueFromState + newCount);
 
   // Streak (consecutive days back from today with at least one review)
   const reviewDays = new Set(
@@ -156,7 +162,12 @@ export default async function FlashcardsPage() {
             <h2 className="font-poppins font-semibold text-base text-neutral-900">
               Recent decks
             </h2>
-            <span className="text-xs text-neutral-400">{recentSets.length} shown</span>
+            <Link
+              href="/flashcards/new"
+              className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+            >
+              Make a deck
+            </Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {recentSets.map((s) => {

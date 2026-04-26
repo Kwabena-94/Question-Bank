@@ -24,6 +24,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { track } from "@/lib/analytics/track";
+import {
+  cacheDueCards,
+  flushQueuedReviews,
+  getQueuedReviewCount,
+  queueReview,
+} from "@/lib/flashcards/offline-review";
 import type { CardFormat, FlashcardMcqOption, Grade } from "@/types";
 import ClozeCard from "./cards/ClozeCard";
 import McqCard from "./cards/McqCard";
@@ -75,6 +81,9 @@ export default function ReviewSession({ cards: initial }: Props) {
   const [grader, setGrader] = useState<{ grade: Grade; rationale: string } | null>(null);
   const [graderLoading, setGraderLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [online, setOnline] = useState(true);
+  const [queuedCount, setQueuedCount] = useState(0);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [tally, setTally] = useState({ reviewed: 0, again: 0, hard: 0, good: 0, easy: 0 });
   const startedAt = useRef(Date.now());
   const reviewedAny = useRef(false);
@@ -87,6 +96,34 @@ export default function ReviewSession({ cards: initial }: Props) {
   useEffect(() => {
     track.flashcardsReviewStarted({ due_count: initial.length });
   }, [initial.length]);
+
+  useEffect(() => {
+    setOnline(navigator.onLine);
+    void cacheDueCards(initial);
+    void getQueuedReviewCount().then(setQueuedCount);
+
+    async function syncQueued() {
+      setOnline(navigator.onLine);
+      if (!navigator.onLine) return;
+      const flushed = await flushQueuedReviews().catch(() => 0);
+      if (flushed > 0) {
+        const count = await getQueuedReviewCount();
+        setQueuedCount(count);
+      }
+    }
+
+    function handleOffline() {
+      setOnline(false);
+    }
+
+    window.addEventListener("online", syncQueued);
+    window.addEventListener("offline", handleOffline);
+    void syncQueued();
+    return () => {
+      window.removeEventListener("online", syncQueued);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [initial]);
 
   // ── Grader ──────────────────────────────────────────────────────────────
   const requestGrade = useCallback(async () => {
@@ -120,20 +157,39 @@ export default function ReviewSession({ cards: initial }: Props) {
     async (grade: Grade) => {
       if (!current || submitting) return;
       setSubmitting(true);
+      setSubmitError(null);
       const accepted = grader?.grade === grade;
       try {
-        const res = await fetch("/api/flashcards/review", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+        let inSession = false;
+        try {
+          const res = await fetch("/api/flashcards/review", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              card_id: current.id,
+              grade,
+              answer_text: answer.trim() || undefined,
+              grader_suggestion: grader?.grade,
+            }),
+          });
+          if (!res.ok) {
+            throw new Error("Review could not be saved.");
+          }
+          const json = await res.json();
+          inSession = !!json?.in_session;
+        } catch (error) {
+          if (navigator.onLine) {
+            setSubmitError(error instanceof Error ? error.message : "Review could not be saved.");
+            return;
+          }
+          await queueReview({
             card_id: current.id,
             grade,
             answer_text: answer.trim() || undefined,
             grader_suggestion: grader?.grade,
-          }),
-        });
-        const json = await res.json();
-        const inSession = !!json?.in_session;
+          });
+          setQueuedCount((count) => count + 1);
+        }
 
         track.flashcardReviewed({
           card_id: current.id,
@@ -256,8 +312,16 @@ export default function ReviewSession({ cards: initial }: Props) {
           <p className="text-neutral-500 mt-2 text-sm">
             {reviewedAny.current
               ? `You reviewed ${tally.reviewed} card${tally.reviewed === 1 ? "" : "s"}.`
-              : "You're caught up. Generate a new deck or check back later."}
+              : online
+                ? "You're caught up. Generate a new deck or check back later."
+                : "You're offline and no cached reviews are currently due on this device."}
           </p>
+          {queuedCount > 0 && (
+            <p className="text-info mt-2 text-xs">
+              {queuedCount} offline review{queuedCount === 1 ? "" : "s"} will sync when
+              connection returns.
+            </p>
+          )}
         </div>
         {reviewedAny.current && (
           <div className="grid grid-cols-4 gap-2 max-w-md mx-auto">
@@ -292,6 +356,20 @@ export default function ReviewSession({ cards: initial }: Props) {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
+      {(!online || queuedCount > 0) && (
+        <div className="rounded-xl border border-info/15 bg-info/[0.06] px-4 py-3 text-sm text-neutral-700">
+          {!online
+            ? "Offline mode: reviews are saved on this device and will sync when you're back online."
+            : `${queuedCount} offline review${queuedCount === 1 ? "" : "s"} waiting to sync.`}
+        </div>
+      )}
+
+      {submitError && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {submitError}
+        </div>
+      )}
+
       {/* Progress */}
       <div className="flex items-center justify-between text-xs text-neutral-500">
         <span>
