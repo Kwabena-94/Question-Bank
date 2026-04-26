@@ -1,13 +1,19 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "sonner";
 import Script from "next/script";
+import PwaRegister from "@/components/PwaRegister";
 
 export const metadata: Metadata = {
   title: "MedBuddy — Your Study Platform",
   description:
     "The unified learning platform for Canadian medical licensure exam preparation. Question Bank, Flashcards, and Mock Exams in one place.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  manifest: "/manifest.webmanifest",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#9E0E27",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -50,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {children}
         <Toaster position="bottom-right" richColors />
+        <PwaRegister />
       </body>
     </html>
   );
