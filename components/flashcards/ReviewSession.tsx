@@ -71,6 +71,7 @@ export default function ReviewSession({ cards: initial }: Props) {
   const router = useRouter();
   const [queue, setQueue] = useState<DueCard[]>(initial);
   const [reveal, setReveal] = useState(false);
+  const [controlsReady, setControlsReady] = useState(false);
   const [answer, setAnswer] = useState("");
   const [selectedMcq, setSelectedMcq] = useState<FlashcardMcqOption | null>(null);
   const [grader, setGrader] = useState<{ grade: Grade; rationale: string } | null>(null);
@@ -152,7 +153,9 @@ export default function ReviewSession({ cards: initial }: Props) {
 
   const onReveal = useCallback(() => {
     if (reveal || !current) return;
+    setControlsReady(false);
     setReveal(true);
+    window.setTimeout(() => setControlsReady(true), 360);
     if (!isMcq && answer.trim()) void requestGrade();
   }, [answer, current, isMcq, requestGrade, reveal]);
 
@@ -224,6 +227,7 @@ export default function ReviewSession({ cards: initial }: Props) {
             return rest;
           });
           setReveal(false);
+          setControlsReady(false);
           setAnswer("");
           setSelectedMcq(null);
           setGrader(null);
@@ -249,7 +253,7 @@ export default function ReviewSession({ cards: initial }: Props) {
       if (e.key === " " && !isTypingTarget(e.target)) {
         e.preventDefault();
         if (!reveal) onReveal();
-        else submit(3);
+        else if (controlsReady) submit(3);
         return;
       }
       if (!reveal && e.key === "Enter" && !e.shiftKey) {
@@ -257,7 +261,7 @@ export default function ReviewSession({ cards: initial }: Props) {
         onReveal();
         return;
       }
-      if (!reveal) return;
+      if (!reveal || !controlsReady) return;
       if (e.key === "1") submit(1);
       else if (e.key === "2") submit(2);
       else if (e.key === "3") submit(3);
@@ -265,11 +269,11 @@ export default function ReviewSession({ cards: initial }: Props) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [current, onReveal, reveal, submit]);
+  }, [controlsReady, current, onReveal, reveal, submit]);
 
   const touch = useRef<{ x: number; y: number; t: number; longPress?: number } | null>(null);
   function onTouchStart(e: React.TouchEvent) {
-    if (!reveal) return;
+    if (!reveal || !controlsReady) return;
     const t = e.touches[0];
     const longPress = window.setTimeout(() => submit(4), 600);
     touch.current = { x: t.clientX, y: t.clientY, t: Date.now(), longPress };
@@ -278,7 +282,7 @@ export default function ReviewSession({ cards: initial }: Props) {
     if (touch.current?.longPress) window.clearTimeout(touch.current.longPress);
   }
   function onTouchEnd(e: React.TouchEvent) {
-    if (!reveal || !touch.current) return;
+    if (!reveal || !controlsReady || !touch.current) return;
     clearLongPress();
     const t = e.changedTouches[0];
     const dx = t.clientX - touch.current.x;
@@ -384,7 +388,7 @@ export default function ReviewSession({ cards: initial }: Props) {
             className="w-full max-w-[720px]"
           >
             <div
-              className="group relative h-[520px] sm:h-[420px]"
+              className="group relative h-[600px] sm:h-[560px]"
               style={{ perspective: 1000 }}
               onTouchStart={onTouchStart}
               onTouchEnd={onTouchEnd}
@@ -397,11 +401,10 @@ export default function ReviewSession({ cards: initial }: Props) {
                   if (!isMcq || selectedMcq || reveal) onReveal();
                 }}
                 disabled={reveal || (isMcq && !selectedMcq)}
-                whileHover={{ rotateX: reveal ? 0 : 1.5, rotateY: reveal ? 0 : -1.5, y: -3 }}
-                whileTap={{ scale: 0.992 }}
+                whileTap={{ scale: 0.985 }}
                 className="absolute inset-0 w-full rounded-[1.35rem] text-left outline-none [transform-style:preserve-3d] disabled:cursor-default"
                 animate={{ rotateY: reveal ? 180 : 0 }}
-                transition={{ type: "spring", stiffness: 260, damping: 24 }}
+                transition={{ type: "spring", stiffness: 220, damping: 24, mass: 0.9 }}
                 style={{ transformStyle: "preserve-3d" }}
               >
                 <CardFace
@@ -453,7 +456,7 @@ export default function ReviewSession({ cards: initial }: Props) {
         )}
 
         <AnimatePresence>
-          {reveal && (
+          {reveal && controlsReady && (
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
@@ -554,7 +557,7 @@ function CardFace({
   const isBack = side === "back";
   return (
     <div
-      className={`absolute inset-0 flex flex-col rounded-[1.35rem] border border-neutral-200/80 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.10)] [backface-visibility:hidden] sm:p-8 ${
+      className={`absolute inset-0 flex flex-col rounded-[1.35rem] border border-neutral-200/80 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.10)] transition-shadow duration-300 [backface-visibility:hidden] sm:p-8 [@media(hover:hover)]:group-hover:shadow-[0_36px_100px_rgba(15,23,42,0.14)] ${
         isBack ? "[transform:rotateY(180deg)]" : ""
       }`}
     >
@@ -591,7 +594,7 @@ function CardFace({
                 onSelect={onSelectMcq}
               />
             ) : (
-              <p className="text-center font-poppins text-2xl font-semibold leading-relaxed text-neutral-900 sm:text-3xl">
+              <p className="text-center font-poppins text-xl font-semibold leading-relaxed text-neutral-900 sm:text-3xl">
                 {card.back}
               </p>
             )}
@@ -623,7 +626,7 @@ function CardFace({
             )}
           </div>
         ) : (
-          <div className="w-full">
+          <div className="max-h-full w-full overflow-y-auto">
             <CardFront card={card} selectedMcq={selectedMcq} onSelectMcq={onSelectMcq} />
           </div>
         )}
@@ -667,7 +670,7 @@ function CardFront({
     );
   }
   return (
-    <p className="text-center font-poppins text-2xl font-semibold leading-relaxed text-neutral-900 sm:text-4xl">
+    <p className="text-center font-poppins text-xl font-semibold leading-relaxed text-neutral-900 sm:text-3xl">
       {card.front}
     </p>
   );
