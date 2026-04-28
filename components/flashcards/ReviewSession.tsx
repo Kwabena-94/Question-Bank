@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Award, Check, Clock3, RotateCcw } from "lucide-react";
@@ -153,7 +153,6 @@ export default function ReviewSession({ cards: initial }: Props) {
     if (reveal || !current) return;
     setControlsReady(false);
     setReveal(true);
-    window.setTimeout(() => setControlsReady(true), 360);
     if (!isMcq && answer.trim()) void requestGrade();
   }, [answer, current, isMcq, requestGrade, reveal]);
 
@@ -218,6 +217,8 @@ export default function ReviewSession({ cards: initial }: Props) {
         }));
         reviewedAny.current = true;
 
+        const exitDelay = grade === 1 ? 340 : grade === 2 ? 280 : 220;
+
         window.setTimeout(() => {
           setQueue((q) => {
             const [head, ...rest] = q;
@@ -230,9 +231,10 @@ export default function ReviewSession({ cards: initial }: Props) {
           setSelectedMcq(null);
           setGrader(null);
           setMotionGrade(null);
-        }, grade === 2 ? 260 : 180);
+        }, exitDelay);
       } finally {
-        window.setTimeout(() => setSubmitting(false), 280);
+        const releaseDelay = grade === 1 ? 420 : grade === 2 ? 360 : 300;
+        window.setTimeout(() => setSubmitting(false), releaseDelay);
       }
     },
     [current, answer, grader, submitting]
@@ -395,19 +397,19 @@ export default function ReviewSession({ cards: initial }: Props) {
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={cardMotion(motionGrade)}
             exit={{ opacity: 0, x: 80 }}
-            transition={{ type: "spring", stiffness: 280, damping: 24 }}
+            transition={cardTransition(motionGrade)}
             className="w-full max-w-[720px]"
           >
             <div
-              className="group relative h-[600px] pb-7 sm:h-[560px]"
+              className="group relative h-[560px] pb-8 sm:h-[520px]"
               style={{ perspective: 1000 }}
               onTouchStart={onTouchStart}
               onTouchEnd={onTouchEnd}
               onTouchMove={onTouchMove}
               onTouchCancel={clearLongPress}
             >
-              <div className="absolute inset-x-8 bottom-3 top-9 rounded-[1.35rem] border border-neutral-200/70 bg-white/80 shadow-[0_18px_55px_rgba(15,23,42,0.08)]" />
-              <div className="absolute inset-x-14 bottom-0 top-16 rounded-[1.35rem] border border-neutral-200/60 bg-white/55 shadow-[0_14px_40px_rgba(15,23,42,0.06)]" />
+              <div className="pointer-events-none absolute inset-x-8 bottom-5 h-10 rounded-b-[1.35rem] border border-neutral-200/70 bg-white/80 shadow-[0_14px_36px_rgba(15,23,42,0.07)]" />
+              <div className="pointer-events-none absolute inset-x-16 bottom-1 h-10 rounded-b-[1.35rem] border border-neutral-200/50 bg-white/55 shadow-[0_10px_24px_rgba(15,23,42,0.05)]" />
               <motion.button
                 type="button"
                 onClick={() => {
@@ -417,7 +419,10 @@ export default function ReviewSession({ cards: initial }: Props) {
                 whileTap={{ scale: 0.985 }}
                 className="absolute inset-x-0 top-0 z-10 h-[calc(100%-2rem)] w-full rounded-[1.35rem] text-left outline-none [transform-style:preserve-3d] disabled:cursor-default"
                 animate={{ rotateY: reveal ? 180 : 0 }}
-                transition={{ type: "spring", stiffness: 220, damping: 24, mass: 0.9 }}
+                transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+                onAnimationComplete={() => {
+                  if (reveal) setControlsReady(true);
+                }}
                 style={{ transformStyle: "preserve-3d" }}
               >
                 <CardFace
@@ -754,11 +759,20 @@ function CompletionStat({ label, value }: { label: string; value: number | strin
 }
 
 function cardMotion(grade: Grade | null) {
-  if (grade === 1) return { opacity: 1, x: [0, -9, 8, -5, 0], y: 0, scale: 1 };
-  if (grade === 2) return { opacity: 1, x: 0, y: [0, 4, 0], scale: 0.99 };
-  if (grade === 3) return { opacity: 0, x: 72, y: 0, scale: 0.99 };
-  if (grade === 4) return { opacity: 0, x: 128, y: -8, scale: 1.02 };
+  if (grade === 1) return { opacity: 1, x: [0, -8, 7, -4, 0], y: 0, scale: 1 };
+  if (grade === 2) return { opacity: 1, x: 0, y: [0, 3, 0], scale: 0.992 };
+  if (grade === 3) return { opacity: 0, x: 56, y: 0, scale: 0.992 };
+  if (grade === 4) return { opacity: 0, x: 84, y: -4, scale: 1.01 };
   return { opacity: 1, x: 0, y: 0, scale: 1 };
+}
+
+function cardTransition(grade: Grade | null) {
+  if (grade === 1) return { duration: 0.34, ease: [0.22, 1, 0.36, 1] };
+  if (grade === 2) return { duration: 0.28, ease: [0.22, 1, 0.36, 1] };
+  if (grade === 3 || grade === 4) {
+    return { type: "spring" as const, stiffness: 300, damping: 30, mass: 0.75 };
+  }
+  return { type: "spring" as const, stiffness: 260, damping: 26, mass: 0.8 };
 }
 
 function sessionTitle(card: DueCard) {
