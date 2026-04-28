@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { track } from "@/lib/analytics/track";
 import type { Flashcard } from "@/types";
@@ -107,6 +108,23 @@ export default function FlashcardFlow({ compact = false }: { compact?: boolean }
 
   return (
     <div className="space-y-6">
+      {compact && cards.length > 0 && (
+        <DeckReady
+          topic={topic.trim()}
+          cards={cards}
+          onCreateAnother={() => {
+            setCards([]);
+            setSetId(null);
+            setIndex(0);
+            setFlipped(false);
+            setTopic("");
+            setError(null);
+          }}
+        />
+      )}
+
+      {(!compact || cards.length === 0) && (
+        <>
       {!compact && (
         <div>
           <h2 className="font-poppins font-semibold text-base text-neutral-900">
@@ -199,8 +217,10 @@ export default function FlashcardFlow({ compact = false }: { compact?: boolean }
       </div>
 
       {loading && <GenerationTimeline />}
+        </>
+      )}
 
-      {cards.length > 0 && current && (
+      {!compact && cards.length > 0 && current && (
         <div className="card-surface p-6 space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-xs text-neutral-500">
@@ -268,6 +288,84 @@ export default function FlashcardFlow({ compact = false }: { compact?: boolean }
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function DeckReady({
+  topic,
+  cards,
+  onCreateAnother,
+}: {
+  topic: string;
+  cards: Flashcard[];
+  onCreateAnother: () => void;
+}) {
+  const counts = cards.reduce(
+    (acc, card) => {
+      acc[card.format ?? "basic"] += 1;
+      return acc;
+    },
+    { basic: 0, cloze: 0, mcq: 0 }
+  );
+  const estimate = Math.max(1, Math.round(cards.length * 0.33));
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-5">
+        <div className="text-[11px] font-medium uppercase tracking-wider text-emerald-700">
+          Deck ready
+        </div>
+        <h3 className="mt-1 font-poppins text-xl font-semibold text-neutral-900">
+          {topic || "New flashcard deck"}
+        </h3>
+        <p className="mt-2 text-sm text-neutral-600">
+          {cards.length} cards · about {estimate} min to review
+        </p>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <FormatStat label="Recall" value={counts.basic} />
+        <FormatStat label="Cloze" value={counts.cloze} />
+        <FormatStat label="Practice Q" value={counts.mcq} />
+      </div>
+
+      <div className="rounded-xl border border-neutral-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+            Preview
+          </span>
+          <span className="text-xs text-neutral-400">First card</span>
+        </div>
+        <GeneratedCardFront card={cards[0]} />
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <Link
+          href="/flashcards/review"
+          className="flex-1 rounded-lg bg-primary px-5 py-3 text-center text-sm font-medium text-white transition-all duration-200 hover:bg-primary/90 active:scale-[0.98]"
+        >
+          Start review
+        </Link>
+        <button
+          type="button"
+          onClick={onCreateAnother}
+          className="flex-1 rounded-lg border border-neutral-200 px-5 py-3 text-sm font-medium text-neutral-700 transition-colors hover:bg-neutral-50"
+        >
+          Create another
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FormatStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-3 text-center">
+      <div className="font-poppins text-xl font-semibold text-neutral-900">{value}</div>
+      <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-neutral-500">
+        {label}
+      </div>
     </div>
   );
 }

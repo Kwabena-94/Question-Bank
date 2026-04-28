@@ -71,7 +71,7 @@ export default async function FlashcardsReviewPage() {
     }));
 
   return (
-    <div className="px-4 py-6 sm:py-8">
+    <div className="-mx-4 -my-5 lg:-mx-6 lg:-my-6">
       <ReviewSession cards={cards} />
     </div>
   );
