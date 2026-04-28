@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Award, Brain, Check, Clock3, Flame, RotateCcw, Sparkles } from "lucide-react";
+import { Award, Check, Clock3, RotateCcw } from "lucide-react";
 import { track } from "@/lib/analytics/track";
 import {
   cacheDueCards,
@@ -91,8 +91,6 @@ export default function ReviewSession({ cards: initial }: Props) {
   const done = totalAtStart - remaining;
   const pct = totalAtStart ? Math.round((done / totalAtStart) * 100) : 0;
   const isMcq = current?.format === "mcq" && !!current.mcq_options?.length;
-  const newCount = useMemo(() => initial.filter((card) => card.is_new).length, [initial]);
-  const reviewCount = Math.max(0, initial.length - newCount);
   const estimatedMin = Math.max(1, Math.round(initial.length * 0.33));
   const elapsedSeconds = Math.max(0, Math.round((Date.now() - startedAt.current) / 1000));
   const retentionScore = tally.reviewed
@@ -322,36 +320,56 @@ export default function ReviewSession({ cards: initial }: Props) {
 
   return (
     <div className="min-h-[calc(100vh-6rem)] bg-[radial-gradient(circle_at_50%_0%,rgba(158,14,39,0.07),transparent_32rem)] px-4 pb-8">
-      <div className="sticky top-0 z-20 -mx-4 border-b border-neutral-200/70 bg-white/78 px-4 py-3 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
-              Review Session
-            </p>
-            <h1 className="truncate font-poppins text-base font-semibold text-neutral-900 sm:text-lg">
-              {sessionTitle(current)}
-            </h1>
-          </div>
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            <motion.div
-              key={tally.reviewed}
-              initial={{ scale: 0.92 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 420, damping: 20 }}
-              className="hidden items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 sm:flex"
-            >
-              <Flame className="h-3.5 w-3.5" />
-              {Math.max(1, tally.reviewed || 1)} streak
-            </motion.div>
-            <div className="rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-600">
-              {Math.min(done + 1, totalAtStart)} / {totalAtStart}
+      <div className="sticky top-0 z-20 -mx-4 border-b border-neutral-200/70 bg-white/82 px-4 py-4 backdrop-blur-xl">
+        <div className="mx-auto max-w-5xl space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+                Clinical Review
+              </p>
+              <h1 className="truncate font-poppins text-base font-semibold text-neutral-900 sm:text-lg">
+                {sessionTitle(current)}
+              </h1>
             </div>
             <Link
               href="/flashcards"
-              className="rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+              className="rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-50"
             >
-              End
+              End Session
             </Link>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-4">
+            <div className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+              Progress
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-neutral-100">
+              <motion.div
+                className="h-full rounded-full bg-primary"
+                initial={{ width: 0 }}
+                animate={{ width: `${pct}%` }}
+                transition={{ type: "spring", stiffness: 180, damping: 24 }}
+              />
+            </div>
+            <div className="flex items-center gap-3 text-xs font-medium text-neutral-600 sm:justify-end">
+              <span>
+                {Math.min(done + 1, totalAtStart)} / {totalAtStart}
+              </span>
+              <span className="h-4 w-px bg-neutral-200" />
+              <span className="inline-flex items-center gap-1.5">
+                <Clock3 className="h-3.5 w-3.5 text-neutral-400" />
+                ~{estimatedMin} min
+              </span>
+              <span className="h-4 w-px bg-neutral-200" />
+              <motion.span
+                key={tally.reviewed}
+                initial={{ scale: 0.94 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 420, damping: 22 }}
+              >
+                {tally.reviewed} reviewed
+              </motion.span>
+            </div>
           </div>
         </div>
       </div>
@@ -371,13 +389,6 @@ export default function ReviewSession({ cards: initial }: Props) {
           </div>
         )}
 
-        <DailyFocusStrip
-          total={totalAtStart}
-          newCount={newCount}
-          reviewCount={reviewCount}
-          estimatedMin={estimatedMin}
-        />
-
         <section className="flex justify-center">
           <motion.div
             key={current.id}
@@ -388,13 +399,15 @@ export default function ReviewSession({ cards: initial }: Props) {
             className="w-full max-w-[720px]"
           >
             <div
-              className="group relative h-[600px] sm:h-[560px]"
+              className="group relative h-[600px] pb-7 sm:h-[560px]"
               style={{ perspective: 1000 }}
               onTouchStart={onTouchStart}
               onTouchEnd={onTouchEnd}
               onTouchMove={onTouchMove}
               onTouchCancel={clearLongPress}
             >
+              <div className="absolute inset-x-8 bottom-3 top-9 rounded-[1.35rem] border border-neutral-200/70 bg-white/80 shadow-[0_18px_55px_rgba(15,23,42,0.08)]" />
+              <div className="absolute inset-x-14 bottom-0 top-16 rounded-[1.35rem] border border-neutral-200/60 bg-white/55 shadow-[0_14px_40px_rgba(15,23,42,0.06)]" />
               <motion.button
                 type="button"
                 onClick={() => {
@@ -402,7 +415,7 @@ export default function ReviewSession({ cards: initial }: Props) {
                 }}
                 disabled={reveal || (isMcq && !selectedMcq)}
                 whileTap={{ scale: 0.985 }}
-                className="absolute inset-0 w-full rounded-[1.35rem] text-left outline-none [transform-style:preserve-3d] disabled:cursor-default"
+                className="absolute inset-x-0 top-0 z-10 h-[calc(100%-2rem)] w-full rounded-[1.35rem] text-left outline-none [transform-style:preserve-3d] disabled:cursor-default"
                 animate={{ rotateY: reveal ? 180 : 0 }}
                 transition={{ type: "spring", stiffness: 220, damping: 24, mass: 0.9 }}
                 style={{ transformStyle: "preserve-3d" }}
@@ -475,65 +488,8 @@ export default function ReviewSession({ cards: initial }: Props) {
             </motion.div>
           )}
         </AnimatePresence>
-
-        <ProgressFooter pct={pct} done={done} total={totalAtStart} tally={tally} />
       </main>
     </div>
-  );
-}
-
-function DailyFocusStrip({
-  total,
-  newCount,
-  reviewCount,
-  estimatedMin,
-}: {
-  total: number;
-  newCount: number;
-  reviewCount: number;
-  estimatedMin: number;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10, scale: 0.99 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ type: "spring", stiffness: 240, damping: 24 }}
-      className="rounded-2xl border border-neutral-200/80 bg-white/90 p-4 shadow-card sm:p-5"
-    >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-4">
-          <div className="relative grid h-14 w-14 place-items-center rounded-full bg-primary/[0.08] text-primary">
-            <motion.span
-              className="absolute inset-0 rounded-full border border-primary/20"
-              animate={{ scale: [1, 1.12, 1], opacity: [0.75, 0.2, 0.75] }}
-              transition={{ repeat: Infinity, duration: 2.8, ease: "easeInOut" }}
-            />
-            <Brain className="h-6 w-6" />
-          </div>
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
-              Today's Focus
-            </p>
-            <div className="mt-1 flex flex-wrap items-baseline gap-3">
-              <span className="font-poppins text-2xl font-semibold text-neutral-900">
-                {total} cards
-              </span>
-              <span className="text-sm font-medium text-primary">{newCount} new</span>
-              <span className="text-sm text-neutral-500">{reviewCount} review</span>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 border-neutral-200 sm:border-l sm:pl-8">
-          <Clock3 className="h-5 w-5 text-neutral-400" />
-          <div>
-            <div className="font-poppins text-lg font-semibold text-neutral-900">
-              {estimatedMin} min
-            </div>
-            <div className="text-xs text-neutral-500">Estimated time</div>
-          </div>
-        </div>
-      </div>
-    </motion.div>
   );
 }
 
@@ -708,47 +664,6 @@ function ConfidenceButton({
   );
 }
 
-function ProgressFooter({
-  pct,
-  done,
-  total,
-  tally,
-}: {
-  pct: number;
-  done: number;
-  total: number;
-  tally: { reviewed: number; again: number; hard: number; good: number; easy: number };
-}) {
-  return (
-    <div className="rounded-2xl border border-neutral-200/80 bg-white/90 p-4 shadow-card">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 flex items-center justify-between text-xs text-neutral-500">
-            <span>Progress</span>
-            <span>
-              {done} / {total} · {pct}%
-            </span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-neutral-100">
-            <motion.div
-              className="h-full rounded-full bg-primary"
-              initial={{ width: 0 }}
-              animate={{ width: `${pct}%` }}
-              transition={{ type: "spring", stiffness: 180, damping: 24 }}
-            />
-          </div>
-        </div>
-        <div className="flex items-center gap-3 border-neutral-200 sm:border-l sm:pl-8">
-          <Sparkles className="h-5 w-5 text-primary" />
-          <div className="text-sm text-neutral-600">
-            <span className="font-semibold text-neutral-900">{tally.good + tally.easy}</span>{" "}
-            strong responses
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function CompletionScreen({
   reviewedAny,
