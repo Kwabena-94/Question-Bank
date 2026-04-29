@@ -4,8 +4,17 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Award, Check, Clock3, RotateCcw } from "lucide-react";
+import { Award, Check, Clock3, Flame, RotateCcw } from "lucide-react";
 import { track } from "@/lib/analytics/track";
+import {
+  springSnappy,
+  springSmooth,
+  springGentle,
+  tweenSmooth,
+  tweenSlow,
+  pulseRing,
+  useMotionTransition,
+} from "@/lib/motion";
 import {
   cacheDueCards,
   flushQueuedReviews,
@@ -31,6 +40,7 @@ interface DueCard {
 
 interface Props {
   cards: DueCard[];
+  currentStreak?: number;
 }
 
 const GRADE_LABEL: Record<Grade, string> = {
@@ -61,13 +71,7 @@ const GRADE_DOT: Record<Grade, string> = {
   4: "bg-emerald-100 text-emerald-700",
 };
 
-const FORMAT_LABEL: Record<CardFormat, string> = {
-  basic: "Recall",
-  cloze: "Cloze",
-  mcq: "Practice Q",
-};
-
-export default function ReviewSession({ cards: initial }: Props) {
+export default function ReviewSession({ cards: initial, currentStreak = 0 }: Props) {
   const router = useRouter();
   const [queue, setQueue] = useState<DueCard[]>(initial);
   const [reveal, setReveal] = useState(false);
@@ -84,6 +88,14 @@ export default function ReviewSession({ cards: initial }: Props) {
   const [tally, setTally] = useState({ reviewed: 0, again: 0, hard: 0, good: 0, easy: 0 });
   const startedAt = useRef(Date.now());
   const reviewedAny = useRef(false);
+
+  // Reduced-motion-aware transitions. Each call subscribes to the same media
+  // query; passing a different `normal` transition is fine.
+  const progressTransition = useMotionTransition(springGentle);
+  const streakTransition = useMotionTransition(springSnappy);
+  const flipTransition = useMotionTransition(tweenSlow);
+  const gradeButtonsTransition = useMotionTransition(springSmooth);
+  const cardEnterTransition = useMotionTransition(cardTransitionFor(motionGrade));
 
   const current = queue[0];
   const remaining = queue.length;
@@ -321,13 +333,13 @@ export default function ReviewSession({ cards: initial }: Props) {
   }
 
   return (
-    <div className="min-h-[calc(100vh-6rem)] bg-[radial-gradient(circle_at_50%_0%,rgba(158,14,39,0.07),transparent_32rem)] px-4 pb-8">
+    <div className="min-h-[calc(100vh-6rem)] px-4 pb-8">
       <div className="sticky top-0 z-20 -mx-4 border-b border-neutral-200/70 bg-white/82 px-4 py-4 backdrop-blur-xl">
         <div className="mx-auto max-w-5xl space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
-                Clinical Review
+                Review Session
               </p>
               <h1 className="truncate font-poppins text-base font-semibold text-neutral-900 sm:text-lg">
                 {sessionTitle(current)}
@@ -350,7 +362,7 @@ export default function ReviewSession({ cards: initial }: Props) {
                 className="h-full rounded-full bg-primary"
                 initial={{ width: 0 }}
                 animate={{ width: `${pct}%` }}
-                transition={{ type: "spring", stiffness: 180, damping: 24 }}
+                transition={progressTransition}
               />
             </div>
             <div className="flex items-center gap-3 text-xs font-medium text-neutral-600 sm:justify-end">
@@ -364,12 +376,14 @@ export default function ReviewSession({ cards: initial }: Props) {
               </span>
               <span className="h-4 w-px bg-neutral-200" />
               <motion.span
-                key={tally.reviewed}
+                key={`streak-${currentStreak}`}
                 initial={{ scale: 0.94 }}
                 animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 420, damping: 22 }}
+                transition={streakTransition}
+                className="inline-flex items-center gap-1.5 text-amber-700"
               >
-                {tally.reviewed} reviewed
+                <Flame className="h-3.5 w-3.5" />
+                {currentStreak} day streak
               </motion.span>
             </div>
           </div>
@@ -392,64 +406,79 @@ export default function ReviewSession({ cards: initial }: Props) {
         )}
 
         <section className="flex justify-center">
-          <motion.div
-            key={current.id}
-            initial={{ opacity: 0, y: 16, scale: 0.98 }}
-            animate={cardMotion(motionGrade)}
-            exit={{ opacity: 0, x: 80 }}
-            transition={cardTransition(motionGrade)}
-            className="w-full max-w-[720px]"
+          <div
+            className="group relative w-full max-w-[720px] pb-10"
+            style={{ perspective: 1200 }}
+            onTouchStart={onTouchStart}
+            onTouchEnd={onTouchEnd}
+            onTouchMove={onTouchMove}
+            onTouchCancel={clearLongPress}
           >
-            <div
-              className="group relative h-[560px] pb-8 sm:h-[520px]"
-              style={{ perspective: 1000 }}
-              onTouchStart={onTouchStart}
-              onTouchEnd={onTouchEnd}
-              onTouchMove={onTouchMove}
-              onTouchCancel={clearLongPress}
-            >
-              <div className="pointer-events-none absolute inset-x-8 bottom-5 h-10 rounded-b-[1.35rem] border border-neutral-200/70 bg-white/80 shadow-[0_14px_36px_rgba(15,23,42,0.07)]" />
-              <div className="pointer-events-none absolute inset-x-16 bottom-1 h-10 rounded-b-[1.35rem] border border-neutral-200/50 bg-white/55 shadow-[0_10px_24px_rgba(15,23,42,0.05)]" />
-              <motion.button
-                type="button"
-                onClick={() => {
-                  if (!isMcq || selectedMcq || reveal) onReveal();
-                }}
-                disabled={reveal || (isMcq && !selectedMcq)}
-                whileTap={{ scale: 0.985 }}
-                className="absolute inset-x-0 top-0 z-10 h-[calc(100%-2rem)] w-full rounded-[1.35rem] text-left outline-none [transform-style:preserve-3d] disabled:cursor-default"
-                animate={{ rotateY: reveal ? 180 : 0 }}
-                transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-                onAnimationComplete={() => {
-                  if (reveal) setControlsReady(true);
-                }}
-                style={{ transformStyle: "preserve-3d" }}
+            {/* Active card + stack ghosts share AnimatePresence so they exit/enter together */}
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={current.id}
+                initial={{ opacity: 0, y: 24, scale: 0.97 }}
+                animate={cardMotion(motionGrade)}
+                exit={{ opacity: 0, x: 80, scale: 0.96 }}
+                transition={cardEnterTransition}
+                className="relative"
               >
-                <CardFace
-                  side="front"
-                  card={current}
-                  reveal={false}
-                  selectedMcq={selectedMcq}
-                  onSelectMcq={(option) => {
-                    setSelectedMcq(option);
-                    setAnswer(`${option.label}. ${option.text}`);
-                  }}
+                {/* Stack ghosts — anchored to the active card's bottom edge */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-16 -bottom-2 h-10 rounded-[1.35rem] border border-neutral-200/50 bg-white/55 shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
                 />
-                <CardFace
-                  side="back"
-                  card={current}
-                  reveal
-                  selectedMcq={selectedMcq}
-                  onSelectMcq={(option) => {
-                    setSelectedMcq(option);
-                    setAnswer(`${option.label}. ${option.text}`);
-                  }}
-                  grader={grader}
-                  graderLoading={graderLoading}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-8 bottom-2 h-10 rounded-[1.35rem] border border-neutral-200/70 bg-white/80 shadow-[0_14px_36px_rgba(15,23,42,0.07)]"
                 />
+
+                <motion.button
+                  type="button"
+                  onClick={() => {
+                    if (!isMcq || selectedMcq || reveal) onReveal();
+                  }}
+                  disabled={reveal || (isMcq && !selectedMcq)}
+                  whileTap={{ scale: 0.985 }}
+                  className="relative z-10 grid w-full text-left outline-none disabled:cursor-default"
+                  animate={{ rotateY: reveal ? 180 : 0 }}
+                  transition={flipTransition}
+                  onAnimationComplete={() => {
+                    if (reveal) setControlsReady(true);
+                  }}
+                  style={{ transformStyle: "preserve-3d" }}
+                >
+                <div className="[grid-area:1/1] [backface-visibility:hidden]">
+                  <CardFace
+                    side="front"
+                    card={current}
+                    reveal={false}
+                    selectedMcq={selectedMcq}
+                    onSelectMcq={(option) => {
+                      setSelectedMcq(option);
+                      setAnswer(`${option.label}. ${option.text}`);
+                    }}
+                  />
+                </div>
+                <div className="[grid-area:1/1] [backface-visibility:hidden] [transform:rotateY(180deg)]">
+                  <CardFace
+                    side="back"
+                    card={current}
+                    reveal
+                    selectedMcq={selectedMcq}
+                    onSelectMcq={(option) => {
+                      setSelectedMcq(option);
+                      setAnswer(`${option.label}. ${option.text}`);
+                    }}
+                    grader={grader}
+                    graderLoading={graderLoading}
+                  />
+                </div>
               </motion.button>
-            </div>
-          </motion.div>
+              </motion.div>
+            </AnimatePresence>
+          </div>
         </section>
 
         {!reveal && !isMcq && (
@@ -479,7 +508,7 @@ export default function ReviewSession({ cards: initial }: Props) {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
-              transition={{ type: "spring", stiffness: 320, damping: 26 }}
+              transition={gradeButtonsTransition}
               className="grid grid-cols-2 gap-3 sm:grid-cols-4"
             >
               {([1, 2, 3, 4] as Grade[]).map((grade) => (
@@ -518,19 +547,12 @@ function CardFace({
   const isBack = side === "back";
   return (
     <div
-      className={`absolute inset-0 flex flex-col rounded-[1.35rem] border border-neutral-200/80 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.10)] transition-shadow duration-300 [backface-visibility:hidden] sm:p-8 [@media(hover:hover)]:group-hover:shadow-[0_36px_100px_rgba(15,23,42,0.14)] ${
-        isBack ? "[transform:rotateY(180deg)]" : ""
-      }`}
+      className="flex min-h-[420px] flex-col rounded-[1.35rem] border border-neutral-200/80 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.10)] transition-shadow duration-300 sm:min-h-[460px] sm:p-8 [@media(hover:hover)]:group-hover:shadow-[0_36px_100px_rgba(15,23,42,0.14)]"
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="space-y-2">
-          <span className="inline-flex rounded-md bg-primary/[0.08] px-3 py-1 text-[11px] font-medium uppercase tracking-wider text-primary">
-            {card.type.replace("_", " ")}
-          </span>
-          <span className="ml-2 inline-flex rounded-md bg-neutral-100 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wider text-neutral-500">
-            {FORMAT_LABEL[card.format]}
-          </span>
-        </div>
+        <span className="inline-flex rounded-md bg-primary/[0.08] px-3 py-1 text-[11px] font-medium uppercase tracking-wider text-primary">
+          {card.type.replace("_", " ")}
+        </span>
         <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-neutral-500">
           <span className={`h-2 w-2 rounded-full ${isBack ? "bg-emerald-500" : "bg-primary"}`} />
           {isBack ? "Back" : "Front"}
@@ -543,9 +565,9 @@ function CardFace({
         </p>
       )}
 
-      <div className="flex min-h-0 flex-1 items-center justify-center py-6">
+      <div className={`flex min-h-0 flex-1 ${isBack ? "items-start" : "items-center"} justify-center py-6`}>
         {isBack ? (
-          <div className="max-h-full w-full space-y-4 overflow-y-auto">
+          <div className="w-full space-y-4 max-h-[60vh] overflow-y-auto">
             {card.format === "mcq" && card.mcq_options?.length ? (
               <McqCard
                 front={card.front}
@@ -587,7 +609,7 @@ function CardFace({
             )}
           </div>
         ) : (
-          <div className="max-h-full w-full overflow-y-auto">
+          <div className="w-full">
             <CardFront card={card} selectedMcq={selectedMcq} onSelectMcq={onSelectMcq} />
           </div>
         )}
@@ -653,7 +675,7 @@ function ConfidenceButton({
       onClick={onClick}
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.97 }}
-      transition={{ type: "spring", stiffness: 420, damping: 20 }}
+      transition={useMotionTransition(springSnappy)}
       className={`rounded-2xl border px-4 py-4 text-left shadow-sm transition-colors disabled:opacity-50 ${GRADE_STYLE[grade]}`}
     >
       <div className="flex items-center gap-3">
@@ -692,13 +714,13 @@ function CompletionScreen({
       <motion.div
         initial={{ opacity: 0, scale: 0.85 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ type: "spring", stiffness: 260, damping: 18 }}
+        transition={useMotionTransition(springSmooth)}
         className="relative grid h-20 w-20 place-items-center rounded-full bg-emerald-50 text-emerald-600"
       >
         <motion.span
           className="absolute inset-0 rounded-full border border-emerald-200"
           animate={{ scale: [1, 1.18], opacity: [0.8, 0] }}
-          transition={{ repeat: 2, duration: 1.2 }}
+          transition={useMotionTransition(pulseRing)}
         />
         <Check className="h-9 w-9" />
       </motion.div>
@@ -759,6 +781,8 @@ function CompletionStat({ label, value }: { label: string; value: number | strin
 }
 
 function cardMotion(grade: Grade | null) {
+  // Animate keyframes are visual choreography, not durations — they belong here,
+  // not in lib/motion.ts. Timing (the actual transitions) is delegated below.
   if (grade === 1) return { opacity: 1, x: [0, -8, 7, -4, 0], y: 0, scale: 1 };
   if (grade === 2) return { opacity: 1, x: 0, y: [0, 3, 0], scale: 0.992 };
   if (grade === 3) return { opacity: 0, x: 56, y: 0, scale: 0.992 };
@@ -766,18 +790,18 @@ function cardMotion(grade: Grade | null) {
   return { opacity: 1, x: 0, y: 0, scale: 1 };
 }
 
-function cardTransition(grade: Grade | null) {
-  if (grade === 1) return { duration: 0.34, ease: [0.22, 1, 0.36, 1] };
-  if (grade === 2) return { duration: 0.28, ease: [0.22, 1, 0.36, 1] };
-  if (grade === 3 || grade === 4) {
-    return { type: "spring" as const, stiffness: 300, damping: 30, mass: 0.75 };
-  }
-  return { type: "spring" as const, stiffness: 260, damping: 26, mass: 0.8 };
+function cardTransitionFor(grade: Grade | null) {
+  // Wrong/hard: a tween (the keyframe shake/bounce in cardMotion drives the
+  // feel; we just need a smooth carrier). Correct/easy: a spring that lets
+  // the card slide off with momentum.
+  if (grade === 1 || grade === 2) return tweenSmooth;
+  if (grade === 3 || grade === 4) return springSnappy;
+  return springSmooth;
 }
 
 function sessionTitle(card: DueCard) {
   const raw = card.type.replace("_", " ");
-  return `${raw.charAt(0).toUpperCase()}${raw.slice(1)} • Review`;
+  return `${raw.charAt(0).toUpperCase()}${raw.slice(1)}`;
 }
 
 function formatDuration(seconds: number) {

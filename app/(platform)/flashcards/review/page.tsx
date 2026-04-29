@@ -30,7 +30,8 @@ export default async function FlashcardsReviewPage() {
   const user = await requireAuth();
   const supabase = await createClient();
 
-  const [{ data: profile }, { data }] = await Promise.all([
+  const sixtyDaysAgoIso = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+  const [{ data: profile }, { data }, { data: recentReviews }] = await Promise.all([
     supabase
       .from("profiles")
       .select("daily_review_cap")
@@ -45,8 +46,33 @@ export default async function FlashcardsReviewPage() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: true })
       .limit(500),
+    supabase
+      .from("flashcard_reviews")
+      .select("reviewed_at")
+      .eq("user_id", user.id)
+      .gte("reviewed_at", sixtyDaysAgoIso)
+      .order("reviewed_at", { ascending: false }),
   ]);
   const dailyCap = profile?.daily_review_cap ?? DEFAULT_DAILY_CAP;
+
+  // Day streak: consecutive days (ending today, or yesterday if today has no review yet)
+  const reviewDays = new Set(
+    (recentReviews ?? []).map((r) => (r.reviewed_at as string).slice(0, 10))
+  );
+  const todayDate = new Date();
+  const todayKey = todayDate.toISOString().slice(0, 10);
+  const yesterdayDate = new Date(todayDate.getTime() - 86_400_000);
+  const yesterdayKey = yesterdayDate.toISOString().slice(0, 10);
+  let currentStreak = 0;
+  let cursor: Date | null = reviewDays.has(todayKey)
+    ? todayDate
+    : reviewDays.has(yesterdayKey)
+      ? yesterdayDate
+      : null;
+  while (cursor && reviewDays.has(cursor.toISOString().slice(0, 10))) {
+    currentStreak++;
+    cursor = new Date(cursor.getTime() - 86_400_000);
+  }
 
   const nowIso = new Date().toISOString();
   const cards = ((data ?? []) as unknown as CardRow[])
@@ -72,7 +98,7 @@ export default async function FlashcardsReviewPage() {
 
   return (
     <div className="-mx-4 -my-5 lg:-mx-6 lg:-my-6">
-      <ReviewSession cards={cards} />
+      <ReviewSession cards={cards} currentStreak={currentStreak} />
     </div>
   );
 }
