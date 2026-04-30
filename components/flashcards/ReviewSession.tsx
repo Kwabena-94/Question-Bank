@@ -88,6 +88,10 @@ export default function ReviewSession({ cards: initial, currentStreak = 0 }: Pro
   const [tally, setTally] = useState({ reviewed: 0, again: 0, hard: 0, good: 0, easy: 0 });
   const startedAt = useRef(Date.now());
   const reviewedAny = useRef(false);
+  const frontRef = useRef<HTMLDivElement | null>(null);
+  const backRef = useRef<HTMLDivElement | null>(null);
+  const [frontHeight, setFrontHeight] = useState<number | "auto">("auto");
+  const [backHeight, setBackHeight] = useState<number | "auto">("auto");
 
   // Reduced-motion-aware transitions. Each call subscribes to the same media
   // query; passing a different `normal` transition is fine.
@@ -98,6 +102,38 @@ export default function ReviewSession({ cards: initial, currentStreak = 0 }: Pro
   const cardEnterTransition = useMotionTransition(cardTransitionFor(motionGrade));
 
   const current = queue[0];
+
+  // controlsReady gates the grade row + keyboard grading. We previously used
+  // motion.button's onAnimationComplete to flip this, but framer doesn't fire
+  // that reliably when an animated property starts as "auto" — so the grade
+  // row would never appear. Drive it with a timeout that matches the flip
+  // duration instead.
+  useEffect(() => {
+    if (!reveal) {
+      setControlsReady(false);
+      return;
+    }
+    const t = window.setTimeout(() => setControlsReady(true), 420);
+    return () => window.clearTimeout(t);
+  }, [reveal]);
+
+  // Measure each face's natural height so the card container animates to the
+  // active face's content size — long answers grow the card; short questions
+  // shrink it. Re-measures on content change and on viewport resize.
+  useEffect(() => {
+    const front = frontRef.current;
+    const back = backRef.current;
+    if (!front || !back) return;
+    const update = () => {
+      setFrontHeight(front.offsetHeight);
+      setBackHeight(back.offsetHeight);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(front);
+    ro.observe(back);
+    return () => ro.disconnect();
+  }, [current?.id, reveal, grader, graderLoading, selectedMcq]);
   const remaining = queue.length;
   const totalAtStart = initial.length;
   const done = totalAtStart - remaining;
@@ -167,6 +203,18 @@ export default function ReviewSession({ cards: initial, currentStreak = 0 }: Pro
     setReveal(true);
     if (!isMcq && answer.trim()) void requestGrade();
   }, [answer, current, isMcq, requestGrade, reveal]);
+
+  // Flip toggle for Space. From front: reveal. From back: hide grade row and
+  // flip back to front so the user can re-attempt the recall.
+  const toggleFlip = useCallback(() => {
+    if (!current) return;
+    if (!reveal) {
+      onReveal();
+    } else {
+      setReveal(false);
+      setControlsReady(false);
+    }
+  }, [current, onReveal, reveal]);
 
   const submit = useCallback(
     async (grade: Grade) => {
@@ -262,26 +310,42 @@ export default function ReviewSession({ cards: initial, currentStreak = 0 }: Pro
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!current) return;
-      if (e.key === " " && !isTypingTarget(e.target)) {
+      if (isTypingTarget(e.target)) return;
+
+      // Space always toggles the flip (never auto-grades).
+      if (e.key === " ") {
         e.preventDefault();
-        if (!reveal) onReveal();
-        else if (controlsReady) submit(3);
+        // MCQ requires picking an option before flipping forward; bail otherwise.
+        if (!reveal && isMcq && !selectedMcq) return;
+        toggleFlip();
         return;
       }
+      // Enter on the front face also flips (parity with Space for keyboard users).
       if (!reveal && e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
+        if (isMcq && !selectedMcq) return;
         onReveal();
         return;
       }
+      // Grading keys only after the back is revealed and the grade row is mounted.
       if (!reveal || !controlsReady) return;
       if (e.key === "1") submit(1);
       else if (e.key === "2") submit(2);
       else if (e.key === "3") submit(3);
       else if (e.key === "4") submit(4);
+      else if (e.key === "ArrowLeft") {
+        // Left = "Again" (rewind for spaced repetition).
+        e.preventDefault();
+        submit(1);
+      } else if (e.key === "ArrowRight") {
+        // Right = "Good" (advance).
+        e.preventDefault();
+        submit(3);
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [controlsReady, current, onReveal, reveal, submit]);
+  }, [controlsReady, current, isMcq, reveal, selectedMcq, submit, toggleFlip]);
 
   const touch = useRef<{ x: number; y: number; t: number; longPress?: number } | null>(null);
   function onTouchStart(e: React.TouchEvent) {
@@ -338,12 +402,9 @@ export default function ReviewSession({ cards: initial, currentStreak = 0 }: Pro
         <div className="mx-auto max-w-5xl space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
+              <p className="font-poppins text-sm font-semibold uppercase tracking-wider text-neutral-700 sm:text-base">
                 Review Session
               </p>
-              <h1 className="truncate font-poppins text-base font-semibold text-neutral-900 sm:text-lg">
-                {sessionTitle(current)}
-              </h1>
             </div>
             <Link
               href="/flashcards"
@@ -407,15 +468,28 @@ export default function ReviewSession({ cards: initial, currentStreak = 0 }: Pro
 
         <section className="flex justify-center">
           <div
-            className="group relative w-full max-w-[720px] pb-10"
+            className="group relative w-full max-w-[720px] pb-4"
             style={{ perspective: 1200 }}
             onTouchStart={onTouchStart}
             onTouchEnd={onTouchEnd}
             onTouchMove={onTouchMove}
             onTouchCancel={clearLongPress}
           >
-            {/* Active card + stack ghosts share AnimatePresence so they exit/enter together */}
-            <AnimatePresence mode="wait" initial={false}>
+            {/* Stack ghosts — static deck-edge peeks anchored to the active card's
+                bottom edge (top: 100%). Independent of wrapper height. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute left-8 right-8 top-full -mt-1 h-2 rounded-b-[1.1rem] border border-neutral-200/70 bg-white/90 shadow-[0_8px_20px_rgba(15,23,42,0.06)]"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute left-16 right-16 top-full mt-1 h-2 rounded-b-[1rem] border border-neutral-200/50 bg-white/70 shadow-[0_4px_12px_rgba(15,23,42,0.04)]"
+            />
+
+            {/* popLayout: exiting card is removed from layout flow so the entering
+                card doesn't get pushed around, but both run animations concurrently —
+                no "blank" gap like mode="wait" produced. */}
+            <AnimatePresence initial={false} mode="popLayout">
               <motion.div
                 key={current.id}
                 initial={{ opacity: 0, y: 24, scale: 0.97 }}
@@ -424,58 +498,71 @@ export default function ReviewSession({ cards: initial, currentStreak = 0 }: Pro
                 transition={cardEnterTransition}
                 className="relative"
               >
-                {/* Stack ghosts — anchored to the active card's bottom edge */}
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-x-16 -bottom-2 h-10 rounded-[1.35rem] border border-neutral-200/50 bg-white/55 shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
-                />
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-x-8 bottom-2 h-10 rounded-[1.35rem] border border-neutral-200/70 bg-white/80 shadow-[0_14px_36px_rgba(15,23,42,0.07)]"
-                />
-
-                <motion.button
-                  type="button"
+                {/* Both faces always rendered for the 3D flip. The container's
+                    height tracks the active face's content via measured refs so
+                    long content never gets cut off. */}
+                <motion.div
+                  role="button"
+                  tabIndex={isMcq && !selectedMcq && !reveal ? -1 : 0}
+                  aria-disabled={isMcq && !selectedMcq && !reveal}
                   onClick={() => {
+                    if (isMcq && !selectedMcq && !reveal) return;
                     if (!isMcq || selectedMcq || reveal) onReveal();
                   }}
-                  disabled={reveal || (isMcq && !selectedMcq)}
-                  whileTap={{ scale: 0.985 }}
-                  className="relative z-10 grid w-full text-left outline-none disabled:cursor-default"
-                  animate={{ rotateY: reveal ? 180 : 0 }}
-                  transition={flipTransition}
-                  onAnimationComplete={() => {
-                    if (reveal) setControlsReady(true);
+                  onKeyDown={(e) => {
+                    // Enter/Space on the card itself — Space is also handled
+                    // globally via toggleFlip; this gives keyboard parity when
+                    // the card has focus directly.
+                    if (e.key === "Enter" || e.key === " ") {
+                      if (isMcq && !selectedMcq && !reveal) return;
+                      e.preventDefault();
+                      if (!isMcq || selectedMcq || reveal) onReveal();
+                    }
                   }}
-                  style={{ transformStyle: "preserve-3d" }}
+                  whileTap={{ scale: 0.985 }}
+                  className="relative z-10 block w-full cursor-pointer text-left outline-none aria-disabled:cursor-default"
+                  animate={{
+                    rotateY: reveal ? 180 : 0,
+                    ...(typeof frontHeight === "number" && typeof backHeight === "number"
+                      ? { height: reveal ? backHeight : frontHeight }
+                      : {}),
+                  }}
+                  transition={flipTransition}
+                  style={{ perspective: 1200, transformStyle: "preserve-3d" }}
                 >
-                <div className="[grid-area:1/1] [backface-visibility:hidden]">
-                  <CardFace
-                    side="front"
-                    card={current}
-                    reveal={false}
-                    selectedMcq={selectedMcq}
-                    onSelectMcq={(option) => {
-                      setSelectedMcq(option);
-                      setAnswer(`${option.label}. ${option.text}`);
-                    }}
-                  />
-                </div>
-                <div className="[grid-area:1/1] [backface-visibility:hidden] [transform:rotateY(180deg)]">
-                  <CardFace
-                    side="back"
-                    card={current}
-                    reveal
-                    selectedMcq={selectedMcq}
-                    onSelectMcq={(option) => {
-                      setSelectedMcq(option);
-                      setAnswer(`${option.label}. ${option.text}`);
-                    }}
-                    grader={grader}
-                    graderLoading={graderLoading}
-                  />
-                </div>
-              </motion.button>
+                  <div
+                    ref={frontRef}
+                    className={`absolute inset-x-0 top-0 w-full [backface-visibility:hidden] ${reveal ? "pointer-events-none" : "pointer-events-auto"}`}
+                  >
+                    <CardFace
+                      side="front"
+                      card={current}
+                      reveal={false}
+                      selectedMcq={selectedMcq}
+                      onSelectMcq={(option) => {
+                        setSelectedMcq(option);
+                        setAnswer(`${option.label}. ${option.text}`);
+                      }}
+                    />
+                  </div>
+                  <div
+                    ref={backRef}
+                    className={`absolute inset-x-0 top-0 w-full [transform:rotateY(180deg)] [backface-visibility:hidden] ${reveal ? "pointer-events-auto" : "pointer-events-none"}`}
+                  >
+                    <CardFace
+                      side="back"
+                      card={current}
+                      reveal
+                      selectedMcq={selectedMcq}
+                      onSelectMcq={(option) => {
+                        setSelectedMcq(option);
+                        setAnswer(`${option.label}. ${option.text}`);
+                      }}
+                      grader={grader}
+                      graderLoading={graderLoading}
+                    />
+                  </div>
+                </motion.div>
               </motion.div>
             </AnimatePresence>
           </div>
@@ -509,16 +596,28 @@ export default function ReviewSession({ cards: initial, currentStreak = 0 }: Pro
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
               transition={gradeButtonsTransition}
-              className="grid grid-cols-2 gap-3 sm:grid-cols-4"
+              className="space-y-3"
             >
-              {([1, 2, 3, 4] as Grade[]).map((grade) => (
-                <ConfidenceButton
-                  key={grade}
-                  grade={grade}
-                  disabled={submitting}
-                  onClick={() => submit(grade)}
-                />
-              ))}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {([1, 2, 3, 4] as Grade[]).map((grade) => (
+                  <ConfidenceButton
+                    key={grade}
+                    grade={grade}
+                    disabled={submitting}
+                    onClick={() => submit(grade)}
+                  />
+                ))}
+              </div>
+              <p className="text-center text-[11px] text-neutral-400">
+                <kbd className="rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 font-mono text-[10px]">Space</kbd>{" "}
+                flip ·{" "}
+                <kbd className="rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 font-mono text-[10px]">←</kbd>{" "}
+                Again ·{" "}
+                <kbd className="rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 font-mono text-[10px]">→</kbd>{" "}
+                Good ·{" "}
+                <kbd className="rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 font-mono text-[10px]">1–4</kbd>{" "}
+                grade
+              </p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -547,7 +646,7 @@ function CardFace({
   const isBack = side === "back";
   return (
     <div
-      className="flex min-h-[420px] flex-col rounded-[1.35rem] border border-neutral-200/80 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.10)] transition-shadow duration-300 sm:min-h-[460px] sm:p-8 [@media(hover:hover)]:group-hover:shadow-[0_36px_100px_rgba(15,23,42,0.14)]"
+      className="flex flex-col rounded-[1.35rem] border border-neutral-200/80 bg-white p-5 shadow-[0_12px_32px_rgba(15,23,42,0.08)] transition-shadow duration-300 sm:p-8 [@media(hover:hover)]:group-hover:shadow-[0_18px_44px_rgba(15,23,42,0.12)]"
     >
       <div className="flex items-start justify-between gap-3">
         <span className="inline-flex rounded-md bg-primary/[0.08] px-3 py-1 text-[11px] font-medium uppercase tracking-wider text-primary">
@@ -565,9 +664,9 @@ function CardFace({
         </p>
       )}
 
-      <div className={`flex min-h-0 flex-1 ${isBack ? "items-start" : "items-center"} justify-center py-6`}>
+      <div className="flex flex-1 items-start justify-center py-6">
         {isBack ? (
-          <div className="w-full space-y-4 max-h-[60vh] overflow-y-auto">
+          <div className="w-full space-y-4">
             {card.format === "mcq" && card.mcq_options?.length ? (
               <McqCard
                 front={card.front}
@@ -577,7 +676,7 @@ function CardFace({
                 onSelect={onSelectMcq}
               />
             ) : (
-              <p className="text-center font-poppins text-xl font-semibold leading-relaxed text-neutral-900 sm:text-3xl">
+              <p className="text-center font-poppins text-xl font-semibold leading-relaxed text-neutral-900 sm:text-2xl">
                 {card.back}
               </p>
             )}
@@ -653,7 +752,7 @@ function CardFront({
     );
   }
   return (
-    <p className="text-center font-poppins text-xl font-semibold leading-relaxed text-neutral-900 sm:text-3xl">
+    <p className="text-center font-poppins text-xl font-semibold leading-relaxed text-neutral-900 sm:text-2xl">
       {card.front}
     </p>
   );
@@ -797,11 +896,6 @@ function cardTransitionFor(grade: Grade | null) {
   if (grade === 1 || grade === 2) return tweenSmooth;
   if (grade === 3 || grade === 4) return springSnappy;
   return springSmooth;
-}
-
-function sessionTitle(card: DueCard) {
-  const raw = card.type.replace("_", " ");
-  return `${raw.charAt(0).toUpperCase()}${raw.slice(1)}`;
 }
 
 function formatDuration(seconds: number) {

@@ -24,7 +24,7 @@ export default function ClozeCard({ front, revealed }: Props) {
   }
 
   return (
-    <p className="text-lg sm:text-xl text-neutral-900 leading-relaxed font-medium">
+    <p className="text-base sm:text-lg text-neutral-900 leading-relaxed font-medium">
       {parts.map((part, index) => {
         if (!part.cloze) return <span key={index}>{part.text}</span>;
         return revealed ? (
