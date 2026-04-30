@@ -104,6 +104,15 @@ const config: Config = {
         "card-hover": "0 4px 16px rgba(0,0,0,0.10)",
         modal: "0 8px 32px rgba(0,0,0,0.12)",
       },
+      keyframes: {
+        shimmer: {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
+      },
+      animation: {
+        shimmer: "shimmer 2s ease-in-out infinite",
+      },
       letterSpacing: {
         tight: "-0.03em",
         snug: "-0.01em",
